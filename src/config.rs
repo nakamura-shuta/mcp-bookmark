@@ -81,21 +81,24 @@ impl Config {
         Self::default()
     }
 
-    /// フォルダパスが含まれるべきかチェック
+    /// Check if a folder path should be included based on filter configuration
+    /// 
+    /// Returns false if the path matches any exclude_folders.
+    /// Returns true if include_folders is empty or the path matches any include_folders.
     pub fn should_include_folder(&self, folder_path: &[String]) -> bool {
-        // exclude_foldersにマッチしたら除外
+        // First check exclusions (exclude takes priority)
         for exclude in &self.exclude_folders {
             if folder_path.starts_with(exclude) {
                 return false;
             }
         }
 
-        // include_foldersが空なら全て含む
+        // If no includes specified, include everything (that wasn't excluded)
         if self.include_folders.is_empty() {
             return true;
         }
 
-        // include_foldersのいずれかにマッチしたら含む
+        // Check if path matches any include pattern
         for include in &self.include_folders {
             if folder_path.starts_with(include) {
                 return true;

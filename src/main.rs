@@ -13,73 +13,86 @@ use std::env;
 use std::sync::Arc;
 use tracing_subscriber::{self, EnvFilter};
 
+/// Parse command-line arguments and build configuration
+fn parse_args() -> Result<Config> {
+    let args: Vec<String> = env::args().collect();
+    let mut config = Config::default();
+    let mut i = 1;
+
+    while i < args.len() {
+        let arg = &args[i];
+
+        match arg.as_str() {
+            "--help" | "-h" => {
+                print_help();
+                std::process::exit(0);
+            }
+            "--exclude" if i + 1 < args.len() => {
+                config.exclude_folders = parse_folder_argument(&args[i + 1]);
+                i += 2;
+                continue;
+            }
+            _ => {
+                // Try to parse as number (max bookmarks)
+                if let Ok(max) = arg.parse::<usize>() {
+                    config.max_bookmarks = max;
+                } else if i == 1 && !arg.starts_with('-') {
+                    // First non-flag argument is folder name(s)
+                    config.include_folders = parse_folder_argument(arg);
+                }
+            }
+        }
+        i += 1;
+    }
+
+    Ok(config)
+}
+
+/// Print help message
+fn print_help() {
+    println!("Chrome Bookmark MCP Server\n");
+    println!("Usage: mcp-bookmark [folder] [max_count]\n");
+    println!("Examples:");
+    println!("  mcp-bookmark                    # All bookmarks");
+    println!("  mcp-bookmark Development         # Only Development folder");
+    println!("  mcp-bookmark Development 10      # Max 10 bookmarks from Development");
+    println!("  mcp-bookmark Work,Tech 20        # Max 20 bookmarks from Work and Tech\n");
+    println!("Advanced options:");
+    println!("  --exclude <folders>  Exclude specified folders");
+}
+
+/// Parse folder argument into folder paths
+/// Handles both simple folder names and full paths
+fn parse_folder_argument(arg: &str) -> Vec<Vec<String>> {
+    arg.split(',')
+        .map(|folder_name| {
+            if !folder_name.contains('/') {
+                // Simple folder name: assume under "Bookmarks Bar" with Japanese support
+                // This handles Japanese Chrome where bookmark bar is named "ブックマーク バー"
+                vec![
+                    "Bookmarks Bar".to_string(),
+                    "ブックマーク バー".to_string(),
+                    folder_name.to_string(),
+                ]
+            } else {
+                // Full path provided
+                folder_name.split('/').map(String::from).collect()
+            }
+        })
+        .collect()
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Initialize logging
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env().add_directive(tracing::Level::INFO.into()))
         .with_writer(std::io::stderr)
         .with_ansi(false)
         .init();
 
-    // コマンドライン引数から設定を作成
-    let args: Vec<String> = env::args().collect();
-    let mut config = Config::default();
-
-    // シンプルな引数パース
-    let mut i = 1;
-    while i < args.len() {
-        let arg = &args[i];
-
-        // ヘルプ
-        if arg == "--help" || arg == "-h" {
-            println!("Chrome Bookmark MCP Server\n");
-            println!("Usage: mcp-bookmark [folder] [max_count]\n");
-            println!("Examples:");
-            println!("  mcp-bookmark                    # 全ブックマーク");
-            println!("  mcp-bookmark Development         # Developmentフォルダのみ");
-            println!("  mcp-bookmark Development 10      # Developmentフォルダの最大10件");
-            println!("  mcp-bookmark Work,Tech 20        # WorkとTechフォルダの最大20件\n");
-            println!("Advanced options:");
-            println!("  --exclude <folders>  除外するフォルダ");
-            return Ok(());
-        }
-
-        // --excludeオプション
-        if arg == "--exclude" && i + 1 < args.len() {
-            let folders = parse_folder_argument(&args[i + 1]);
-            config.exclude_folders = folders;
-            i += 2;
-            continue;
-        }
-
-        // 数字なら最大数として扱う
-        if let Ok(max) = arg.parse::<usize>() {
-            config.max_bookmarks = max;
-            i += 1;
-            continue;
-        }
-
-        // それ以外はフォルダ名として扱う（最初の引数のみ）
-        if i == 1 && !arg.starts_with("-") {
-            config.include_folders = parse_folder_argument(arg);
-        }
-
-        i += 1;
-    }
-
-    // フォルダ引数をパースする補助関数
-    fn parse_folder_argument(arg: &str) -> Vec<Vec<String>> {
-        arg.split(',')
-            .map(|folder_name| {
-                if !folder_name.contains('/') {
-                    // シンプルなフォルダ名は Bookmarks Bar/ブックマーク バー 配下として扱う（日本語環境対応）
-                    vec!["Bookmarks Bar".to_string(), "ブックマーク バー".to_string(), folder_name.to_string()]
-                } else {
-                    folder_name.split('/').map(String::from).collect()
-                }
-            })
-            .collect()
-    }
+    // Parse command-line arguments
+    let config = parse_args()?;
 
     tracing::info!("Starting Chrome Bookmark MCP Server");
     if !config.include_folders.is_empty() {

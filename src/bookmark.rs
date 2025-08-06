@@ -259,65 +259,62 @@ impl BookmarkReader {
         let mut bookmarks: ChromeBookmarks =
             serde_json::from_str(&content).context("Failed to parse bookmarks JSON")?;
 
-        // 日本語環境対応: folder_pathを直接設定（set_folder_pathsはnameを追加するため）
-        if bookmarks.roots.bookmark_bar.name == "ブックマーク バー" {
-            bookmarks.roots.bookmark_bar.folder_path = vec!["Bookmarks Bar".to_string(), "ブックマーク バー".to_string()];
-            if let Some(children) = &mut bookmarks.roots.bookmark_bar.children {
-                for child in children {
-                    child.set_folder_paths(vec!["Bookmarks Bar".to_string(), "ブックマーク バー".to_string()]);
-                }
-            }
-        } else {
-            bookmarks.roots.bookmark_bar.set_folder_paths(vec!["Bookmarks Bar".to_string()]);
-        }
-        
-        if bookmarks.roots.other.name == "その他のブックマーク" {
-            bookmarks.roots.other.folder_path = vec!["Other Bookmarks".to_string(), "その他のブックマーク".to_string()];
-            if let Some(children) = &mut bookmarks.roots.other.children {
-                for child in children {
-                    child.set_folder_paths(vec!["Other Bookmarks".to_string(), "その他のブックマーク".to_string()]);
-                }
-            }
-        } else {
-            bookmarks.roots.other.set_folder_paths(vec!["Other Bookmarks".to_string()]);
-        }
-        
-        if bookmarks.roots.synced.name == "モバイルのブックマーク" {
-            bookmarks.roots.synced.folder_path = vec!["Synced Bookmarks".to_string(), "モバイルのブックマーク".to_string()];
-            if let Some(children) = &mut bookmarks.roots.synced.children {
-                for child in children {
-                    child.set_folder_paths(vec!["Synced Bookmarks".to_string(), "モバイルのブックマーク".to_string()]);
-                }
-            }
-        } else {
-            bookmarks.roots.synced.set_folder_paths(vec!["Synced Bookmarks".to_string()]);
-        }
+        // Initialize folder paths for each root node
+        self.initialize_root_folder_paths(&mut bookmarks);
 
         Ok(bookmarks)
     }
 
+    /// Initialize folder paths for root bookmark nodes, handling Japanese environment
+    fn initialize_root_folder_paths(&self, bookmarks: &mut ChromeBookmarks) {
+        // Define root folder mappings (English canonical name -> Japanese display name)
+        const BOOKMARK_BAR_JP: &str = "ブックマーク バー";
+        const OTHER_BOOKMARKS_JP: &str = "その他のブックマーク";
+        const SYNCED_BOOKMARKS_JP: &str = "モバイルのブックマーク";
+
+        // Helper function to set up root folder with proper path
+        fn setup_root_folder(node: &mut BookmarkNode, canonical_name: &str, japanese_name: &str) {
+            if node.name == japanese_name {
+                // Japanese environment: set dual-language path
+                node.folder_path = vec![canonical_name.to_string(), japanese_name.to_string()];
+                if let Some(children) = &mut node.children {
+                    for child in children {
+                        child.set_folder_paths(vec![canonical_name.to_string(), japanese_name.to_string()]);
+                    }
+                }
+            } else {
+                // English environment: use standard path
+                node.set_folder_paths(vec![canonical_name.to_string()]);
+            }
+        }
+
+        setup_root_folder(&mut bookmarks.roots.bookmark_bar, "Bookmarks Bar", BOOKMARK_BAR_JP);
+        setup_root_folder(&mut bookmarks.roots.other, "Other Bookmarks", OTHER_BOOKMARKS_JP);
+        setup_root_folder(&mut bookmarks.roots.synced, "Synced Bookmarks", SYNCED_BOOKMARKS_JP);
+    }
+
     pub fn get_all_bookmarks(&self) -> Result<Vec<FlatBookmark>> {
         let bookmarks = self.read()?;
+        
+        // Collect all bookmarks from all root nodes
         let mut all = Vec::new();
-
         all.extend(bookmarks.roots.bookmark_bar.flatten());
         all.extend(bookmarks.roots.other.flatten());
         all.extend(bookmarks.roots.synced.flatten());
 
-        // フィルタリング適用
-        let filtered: Vec<FlatBookmark> = all
-            .into_iter()
-            .filter(|b| self.config.should_include_folder(&b.folder_path))
-            .collect();
+        // Apply filtering and limits
+        let filtered = self.apply_folder_filter(all);
+        Ok(self.apply_max_limit(filtered))
+    }
 
-        // 最大数制限
-        if self.config.max_bookmarks > 0 && filtered.len() > self.config.max_bookmarks {
-            Ok(filtered
-                .into_iter()
+    /// Apply maximum bookmark limit if configured
+    fn apply_max_limit(&self, bookmarks: Vec<FlatBookmark>) -> Vec<FlatBookmark> {
+        if self.config.max_bookmarks > 0 && bookmarks.len() > self.config.max_bookmarks {
+            bookmarks.into_iter()
                 .take(self.config.max_bookmarks)
-                .collect())
+                .collect()
         } else {
-            Ok(filtered)
+            bookmarks
         }
     }
 
@@ -325,68 +322,91 @@ impl BookmarkReader {
         let all_bookmarks = self.get_all_bookmarks()?;
         let query_lower = query.to_lowercase();
 
-        Ok(all_bookmarks
+        // Search in both bookmark name and URL
+        let results = all_bookmarks
             .into_iter()
             .filter(|bookmark| {
                 bookmark.name.to_lowercase().contains(&query_lower)
                     || bookmark.url.to_lowercase().contains(&query_lower)
             })
-            .collect())
+            .collect();
+            
+        Ok(results)
     }
 
     pub fn get_folder_bookmarks(&self, folder_path: &[String]) -> Result<Vec<FlatBookmark>> {
-        let bookmarks = self.read()?;
-
-        let node = if folder_path.is_empty() {
+        if folder_path.is_empty() {
             return self.get_all_bookmarks();
-        } else if folder_path[0] == "Bookmarks Bar" {
-            // 日本語環境対応: "Bookmarks Bar/ブックマーク バー/..." のパスを処理
-            if folder_path.len() > 1 && folder_path[1] == "ブックマーク バー" {
-                bookmarks.roots.bookmark_bar.find_folder(&folder_path[2..])
-            } else {
-                bookmarks.roots.bookmark_bar.find_folder(&folder_path[1..])
-            }
-        } else if folder_path[0] == "Other Bookmarks" {
-            if folder_path.len() > 1 && folder_path[1] == "その他のブックマーク" {
-                bookmarks.roots.other.find_folder(&folder_path[2..])
-            } else {
-                bookmarks.roots.other.find_folder(&folder_path[1..])
-            }
-        } else if folder_path[0] == "Synced Bookmarks" {
-            if folder_path.len() > 1 && folder_path[1] == "モバイルのブックマーク" {
-                bookmarks.roots.synced.find_folder(&folder_path[2..])
-            } else {
-                bookmarks.roots.synced.find_folder(&folder_path[1..])
-            }
-        } else {
-            None
-        };
+        }
 
-        match node {
+        let bookmarks = self.read()?;
+        
+        // Find the appropriate root node and adjust path for Japanese environment
+        let (root_node, adjusted_path) = self.find_root_node_and_path(&bookmarks, folder_path);
+        
+        match root_node.and_then(|node| node.find_folder(adjusted_path)) {
             Some(n) => {
                 let all_bookmarks = n.flatten();
-                // フィルタリングを適用
-                let filtered: Vec<FlatBookmark> = all_bookmarks
-                    .into_iter()
-                    .filter(|b| self.config.should_include_folder(&b.folder_path))
-                    .collect();
-                Ok(filtered)
+                // Apply filtering based on configuration
+                Ok(self.apply_folder_filter(all_bookmarks))
             },
             None => Ok(Vec::new()),
         }
     }
 
+    /// Find the appropriate root node and adjust the folder path for Japanese environment
+    fn find_root_node_and_path<'a, 'b>(
+        &self,
+        bookmarks: &'a ChromeBookmarks,
+        folder_path: &'b [String],
+    ) -> (Option<&'a BookmarkNode>, &'b [String]) {
+        if folder_path.is_empty() {
+            return (None, &[]);
+        }
+
+        // Japanese folder name constants
+        const BOOKMARK_BAR_JP: &str = "ブックマーク バー";
+        const OTHER_BOOKMARKS_JP: &str = "その他のブックマーク";
+        const SYNCED_BOOKMARKS_JP: &str = "モバイルのブックマーク";
+
+        let (root_node, japanese_name) = match folder_path[0].as_str() {
+            "Bookmarks Bar" => (Some(&bookmarks.roots.bookmark_bar), BOOKMARK_BAR_JP),
+            "Other Bookmarks" => (Some(&bookmarks.roots.other), OTHER_BOOKMARKS_JP),
+            "Synced Bookmarks" => (Some(&bookmarks.roots.synced), SYNCED_BOOKMARKS_JP),
+            _ => return (None, &[]),
+        };
+
+        // Skip Japanese folder name if present in path
+        let adjusted_path = if folder_path.len() > 1 && folder_path[1] == japanese_name {
+            &folder_path[2..]
+        } else {
+            &folder_path[1..]
+        };
+
+        (root_node, adjusted_path)
+    }
+
+    /// Apply folder filtering based on configuration
+    fn apply_folder_filter(&self, bookmarks: Vec<FlatBookmark>) -> Vec<FlatBookmark> {
+        bookmarks
+            .into_iter()
+            .filter(|b| self.config.should_include_folder(&b.folder_path))
+            .collect()
+    }
+
+    /// List all bookmark folders without filtering
     pub fn list_all_folders(&self) -> Result<Vec<Vec<String>>> {
         let bookmarks = self.read()?;
         self.list_all_folders_internal(&bookmarks)
     }
 
+    /// List bookmark folders with configuration filtering applied
     pub fn list_filtered_folders(&self) -> Result<Vec<Vec<String>>> {
         let bookmarks = self.read()?;
         let all_folders = self.list_all_folders_internal(&bookmarks)?;
         
-        // フィルタリングを適用
-        let filtered: Vec<Vec<String>> = all_folders
+        // Apply folder filtering based on configuration
+        let filtered = all_folders
             .into_iter()
             .filter(|folder_path| self.config.should_include_folder(folder_path))
             .collect();
