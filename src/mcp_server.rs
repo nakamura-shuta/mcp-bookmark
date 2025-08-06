@@ -12,6 +12,8 @@ use std::sync::Arc;
 
 use crate::bookmark::BookmarkReader;
 use crate::content::ContentFetcher;
+use crate::search::{SearchManager, SearchParams};
+use std::sync::Mutex;
 
 // Tool request/response types
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -26,19 +28,37 @@ pub struct GetBookmarkContentRequest {
     pub url: String,
 }
 
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct FullTextSearchRequest {
+    #[schemars(description = "Search query for full-text search")]
+    pub query: String,
+    #[schemars(description = "Optional folder filter")]
+    pub folder: Option<String>,
+    #[schemars(description = "Optional domain filter")]
+    pub domain: Option<String>,
+    #[schemars(description = "Maximum number of results (default: 20)")]
+    pub limit: Option<usize>,
+}
+
 #[derive(Debug, Clone)]
 pub struct BookmarkServer {
     pub reader: Arc<BookmarkReader>,
     pub fetcher: Arc<ContentFetcher>,
+    pub search_manager: Arc<Mutex<SearchManager>>,
     tool_router: ToolRouter<Self>,
 }
 
 #[tool_router]
 impl BookmarkServer {
-    pub fn new(reader: Arc<BookmarkReader>, fetcher: Arc<ContentFetcher>) -> Self {
+    pub fn new(
+        reader: Arc<BookmarkReader>,
+        fetcher: Arc<ContentFetcher>,
+        search_manager: Arc<Mutex<SearchManager>>,
+    ) -> Self {
         Self {
             reader,
             fetcher,
+            search_manager,
             tool_router: Self::tool_router(),
         }
     }
@@ -77,6 +97,36 @@ impl BookmarkServer {
             }
             Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
                 "Error listing folders: {e}"
+            ))])),
+        }
+    }
+
+    #[tool(description = "Full-text search through bookmarks and their content")]
+    fn search_bookmarks_fulltext(
+        &self,
+        Parameters(req): Parameters<FullTextSearchRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let search_manager = self.search_manager.lock().unwrap();
+        
+        let mut params = SearchParams::new(&req.query);
+        if let Some(folder) = req.folder {
+            params = params.with_folder(folder);
+        }
+        if let Some(domain) = req.domain {
+            params = params.with_domain(domain);
+        }
+        if let Some(limit) = req.limit {
+            params = params.with_limit(limit);
+        }
+        
+        match search_manager.search_advanced(&params) {
+            Ok(results) => {
+                let content = serde_json::to_string_pretty(&results)
+                    .unwrap_or_else(|e| format!("Error serializing results: {e}"));
+                Ok(CallToolResult::success(vec![Content::text(content)]))
+            }
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
+                "Error searching bookmarks: {e}"
             ))])),
         }
     }

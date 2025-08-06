@@ -2,15 +2,17 @@ mod bookmark;
 mod config;
 mod content;
 mod mcp_server;
+mod search;
 
 use anyhow::Result;
 use bookmark::BookmarkReader;
 use config::Config;
 use content::ContentFetcher;
 use mcp_server::BookmarkServer;
+use search::SearchManager;
 use rmcp::{ServiceExt, transport::stdio};
 use std::env;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tracing_subscriber::{self, EnvFilter};
 
 /// Parse command-line arguments and build configuration
@@ -106,9 +108,19 @@ async fn main() -> Result<()> {
     }
 
     // Create MCP server components
-    let reader = Arc::new(BookmarkReader::with_config(config)?);
+    let reader = Arc::new(BookmarkReader::with_config(config.clone())?);
     let fetcher = Arc::new(ContentFetcher::new()?);
-    let server = BookmarkServer::new(reader, fetcher);
+    
+    // Initialize search manager and build index
+    let mut search_manager = SearchManager::new(None)?;
+    
+    // Get all bookmarks and build the search index
+    let all_bookmarks = reader.get_all_bookmarks()?;
+    tracing::info!("Building search index for {} bookmarks", all_bookmarks.len());
+    search_manager.build_index(&all_bookmarks)?;
+    
+    let search_manager = Arc::new(Mutex::new(search_manager));
+    let server = BookmarkServer::new(reader, fetcher, search_manager);
 
     // Serve the MCP server
     let service = server.serve(stdio()).await?;
