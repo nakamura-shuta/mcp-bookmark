@@ -2,8 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct Config {
     /// 読み込むフォルダパスのリスト（空の場合は全て読み込む）
     #[serde(default)]
@@ -17,7 +16,6 @@ pub struct Config {
     #[serde(default)]
     pub max_bookmarks: usize,
 }
-
 
 impl Config {
     /// 設定ファイルから読み込み

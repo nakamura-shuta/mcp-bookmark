@@ -69,7 +69,7 @@ impl BookmarkServer {
 
     #[tool(description = "List all bookmark folders")]
     fn list_bookmark_folders(&self) -> Result<CallToolResult, McpError> {
-        match self.reader.list_all_folders() {
+        match self.reader.list_filtered_folders() {
             Ok(folders) => {
                 let content = serde_json::to_string_pretty(&folders)
                     .unwrap_or_else(|e| format!("Error serializing folders: {e}"));
@@ -145,7 +145,7 @@ impl ServerHandler for BookmarkServer {
         ));
 
         // Resource: bookmark://folder/{path} for each folder
-        if let Ok(folders) = self.reader.list_all_folders() {
+        if let Ok(folders) = self.reader.list_filtered_folders() {
             for folder_path in folders {
                 let uri = format!("bookmark://folder/{}", folder_path.join("/"));
                 let name = folder_path.last().unwrap_or(&"Unknown".to_string()).clone();
@@ -170,10 +170,10 @@ impl ServerHandler for BookmarkServer {
         _context: RequestContext<RoleServer>,
     ) -> Result<ReadResourceResult, McpError> {
         if uri == "bookmark://tree" {
-            // Return full bookmark tree
-            match self.reader.read() {
-                Ok(tree) => {
-                    let content = serde_json::to_string_pretty(&tree)
+            // Return filtered bookmarks
+            match self.reader.get_all_bookmarks() {
+                Ok(bookmarks) => {
+                    let content = serde_json::to_string_pretty(&bookmarks)
                         .map_err(|e| McpError::internal_error(e.to_string(), None))?;
 
                     Ok(ReadResourceResult {

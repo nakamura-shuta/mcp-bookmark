@@ -45,13 +45,12 @@ async fn main() -> Result<()> {
         }
 
         // --excludeオプション
-        if arg == "--exclude"
-            && i + 1 < args.len() {
-                let folders = parse_folder_argument(&args[i + 1]);
-                config.exclude_folders = folders;
-                i += 2;
-                continue;
-            }
+        if arg == "--exclude" && i + 1 < args.len() {
+            let folders = parse_folder_argument(&args[i + 1]);
+            config.exclude_folders = folders;
+            i += 2;
+            continue;
+        }
 
         // 数字なら最大数として扱う
         if let Ok(max) = arg.parse::<usize>() {
@@ -73,8 +72,8 @@ async fn main() -> Result<()> {
         arg.split(',')
             .map(|folder_name| {
                 if !folder_name.contains('/') {
-                    // シンプルなフォルダ名は Bookmarks Bar 配下として扱う
-                    vec!["Bookmarks Bar".to_string(), folder_name.to_string()]
+                    // シンプルなフォルダ名は Bookmarks Bar/ブックマーク バー 配下として扱う（日本語環境対応）
+                    vec!["Bookmarks Bar".to_string(), "ブックマーク バー".to_string(), folder_name.to_string()]
                 } else {
                     folder_name.split('/').map(String::from).collect()
                 }
