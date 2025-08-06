@@ -1,9 +1,11 @@
 pub mod indexer;
 pub mod schema;
 pub mod searcher;
+pub mod hybrid;
 
 // Re-export commonly used types
 pub use searcher::{SearchParams, SearchResult};
+pub use hybrid::HybridSearchManager;
 
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};

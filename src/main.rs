@@ -9,10 +9,10 @@ use bookmark::BookmarkReader;
 use config::Config;
 use content::ContentFetcher;
 use mcp_server::BookmarkServer;
-use search::SearchManager;
+use search::HybridSearchManager;
 use rmcp::{ServiceExt, transport::stdio};
 use std::env;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tracing_subscriber::{self, EnvFilter};
 
 /// Parse command-line arguments and build configuration
@@ -111,15 +111,14 @@ async fn main() -> Result<()> {
     let reader = Arc::new(BookmarkReader::with_config(config.clone())?);
     let fetcher = Arc::new(ContentFetcher::new()?);
     
-    // Initialize search manager and build index
-    let mut search_manager = SearchManager::new(None)?;
+    // ハイブリッド検索マネージャーを初期化
+    tracing::info!("初期化中...");
+    let search_manager = HybridSearchManager::new(reader.clone(), fetcher.clone()).await?;
+    let search_manager = Arc::new(search_manager);
     
-    // Get all bookmarks and build the search index
-    let all_bookmarks = reader.get_all_bookmarks()?;
-    tracing::info!("Building search index for {} bookmarks", all_bookmarks.len());
-    search_manager.build_index(&all_bookmarks)?;
+    tracing::info!("✅ サーバー準備完了！検索可能です");
+    tracing::info!("{}", search_manager.get_indexing_status());
     
-    let search_manager = Arc::new(Mutex::new(search_manager));
     let server = BookmarkServer::new(reader, fetcher, search_manager);
 
     // Serve the MCP server

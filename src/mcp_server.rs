@@ -12,8 +12,7 @@ use std::sync::Arc;
 
 use crate::bookmark::BookmarkReader;
 use crate::content::ContentFetcher;
-use crate::search::{SearchManager, SearchParams};
-use std::sync::Mutex;
+use crate::search::{HybridSearchManager, SearchParams};
 
 // Tool request/response types
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -44,7 +43,7 @@ pub struct FullTextSearchRequest {
 pub struct BookmarkServer {
     pub reader: Arc<BookmarkReader>,
     pub fetcher: Arc<ContentFetcher>,
-    pub search_manager: Arc<Mutex<SearchManager>>,
+    pub search_manager: Arc<HybridSearchManager>,
     tool_router: ToolRouter<Self>,
 }
 
@@ -53,7 +52,7 @@ impl BookmarkServer {
     pub fn new(
         reader: Arc<BookmarkReader>,
         fetcher: Arc<ContentFetcher>,
-        search_manager: Arc<Mutex<SearchManager>>,
+        search_manager: Arc<HybridSearchManager>,
     ) -> Self {
         Self {
             reader,
@@ -101,27 +100,41 @@ impl BookmarkServer {
         }
     }
 
-    #[tool(description = "Full-text search through bookmarks and their content")]
-    fn search_bookmarks_fulltext(
+    #[tool(description = "Full-text search through bookmarks (with progressive indexing)")]
+    async fn search_bookmarks_fulltext(
         &self,
         Parameters(req): Parameters<FullTextSearchRequest>,
     ) -> Result<CallToolResult, McpError> {
-        let search_manager = self.search_manager.lock().unwrap();
+        // ハイブリッド検索を使用
+        let results = if req.folder.is_some() || req.domain.is_some() {
+            // フィルター付きは tantivy のみ
+            let mut params = SearchParams::new(&req.query);
+            if let Some(folder) = req.folder {
+                params = params.with_folder(folder);
+            }
+            if let Some(domain) = req.domain {
+                params = params.with_domain(domain);
+            }
+            if let Some(limit) = req.limit {
+                params = params.with_limit(limit);
+            }
+            self.search_manager.search_advanced(&params).await
+        } else {
+            // 通常検索はハイブリッド
+            self.search_manager.search(&req.query, req.limit.unwrap_or(20)).await
+        };
         
-        let mut params = SearchParams::new(&req.query);
-        if let Some(folder) = req.folder {
-            params = params.with_folder(folder);
-        }
-        if let Some(domain) = req.domain {
-            params = params.with_domain(domain);
-        }
-        if let Some(limit) = req.limit {
-            params = params.with_limit(limit);
-        }
-        
-        match search_manager.search_advanced(&params) {
+        match results {
             Ok(results) => {
-                let content = serde_json::to_string_pretty(&results)
+                // インデックス状況を含める
+                let status = self.search_manager.get_indexing_status();
+                let response = json!({
+                    "results": results,
+                    "indexing_status": status,
+                    "total_results": results.len(),
+                });
+                
+                let content = serde_json::to_string_pretty(&response)
                     .unwrap_or_else(|e| format!("Error serializing results: {e}"));
                 Ok(CallToolResult::success(vec![Content::text(content)]))
             }
@@ -129,6 +142,21 @@ impl BookmarkServer {
                 "Error searching bookmarks: {e}"
             ))])),
         }
+    }
+    
+    #[tool(description = "Get indexing status")]
+    fn get_indexing_status(&self) -> Result<CallToolResult, McpError> {
+        let status = self.search_manager.get_indexing_status();
+        let is_complete = self.search_manager.is_indexing_complete();
+        
+        let response = json!({
+            "status": status,
+            "is_complete": is_complete,
+        });
+        
+        let content = serde_json::to_string_pretty(&response)
+            .unwrap_or_else(|e| format!("Error: {e}"));
+        Ok(CallToolResult::success(vec![Content::text(content)]))
     }
 
     #[tool(description = "Fetch content from a bookmark URL")]
