@@ -1,0 +1,9 @@
+/internal_docs
+/target
+/.claude
+
+# ビルド済みバイナリ
+mcp-bookmark-darwin-*
+mcp-bookmark-linux-*
+mcp-bookmark-windows-*
+mcp-bookmark.exe

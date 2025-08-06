@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "chrome-bookmarks": {
+      "command": "/Users/nakamura.shuta/dev/rust/mcp-bookmark/target/release/mcp-bookmark",
+      "args": ["Bookmarks Bar/ブックマーク バー/test-mcp", "5"],
+      "env": {
+        "RUST_LOG": "info"
+      }
+    }
+  }
+}
