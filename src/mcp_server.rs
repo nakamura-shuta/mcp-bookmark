@@ -89,17 +89,21 @@ impl BookmarkServer {
         match self.fetcher.fetch_page(&req.url).await {
             Ok(html) => {
                 let metadata = self.fetcher.extract_metadata(&html, &req.url);
+                let page_content = self.fetcher.extract_content(&html);
+
                 let content = json!({
                     "url": req.url,
                     "title": metadata.title,
                     "description": metadata.description,
                     "og_title": metadata.og_title,
                     "og_description": metadata.og_description,
+                    "text_content": page_content.text_content,
+                    "main_content": page_content.main_content,
                 });
 
                 Ok(CallToolResult::success(vec![Content::text(
                     serde_json::to_string_pretty(&content)
-                        .unwrap_or_else(|e| format!("Error serializing metadata: {e}")),
+                        .unwrap_or_else(|e| format!("Error serializing content: {e}")),
                 )]))
             }
             Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
