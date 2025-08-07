@@ -78,13 +78,13 @@ async fn test_real_url_fetch() {
             // Verify full content is not truncated
             if let Some(text) = content.text_content {
                 println!("Fetched content length: {} chars", text.len());
-                assert!(text.len() > 0);
+                assert!(!text.is_empty());
             }
 
             println!("✅ Real URL fetch test passed!");
         }
         Err(e) => {
-            eprintln!("Warning: Could not fetch example.com: {}", e);
+            eprintln!("Warning: Could not fetch example.com: {e}");
         }
     }
 }

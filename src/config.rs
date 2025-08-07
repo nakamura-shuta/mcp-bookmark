@@ -82,7 +82,7 @@ impl Config {
     }
 
     /// Check if a folder path should be included based on filter configuration
-    /// 
+    ///
     /// Returns false if the path matches any exclude_folders.
     /// Returns true if include_folders is empty or the path matches any include_folders.
     pub fn should_include_folder(&self, folder_path: &[String]) -> bool {

@@ -9,9 +9,17 @@ Chromeブックマークを Model Context Protocol (MCP) 経由で AI アシス�
 - `bookmark://folder/{path}` - 特定フォルダのブックマーク
 
 ### ツール
-- `search_bookmarks` - タイトルまたは URL でブックマークを検索
+- `search_bookmarks` - タイトルまたは URL でブックマークを検索（シンプル検索）
+- `search_bookmarks_fulltext` - tantivy による全文検索（タイトル、URL、コンテンツ）
+- `search_by_content` - ページコンテンツのみで検索
 - `get_bookmark_content` - ブックマーク URL からページメタデータを取得
 - `list_bookmark_folders` - 全フォルダ一覧を取得
+- `get_indexing_status` - インデックス構築状況を確認
+
+### 検索システム
+- **tantivy全文検索エンジン**: 高速な全文検索
+- **バックグラウンドインデックス**: 起動後に自動でコンテンツを取得・インデックス化
+- **優先度付きインデックス**: ドキュメントサイト（docs.rs等）を優先的に処理
 
 ## インストール
 

@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use tantivy::{TantivyDocument, Index, IndexWriter};
+use tantivy::{Index, IndexWriter, TantivyDocument};
 use tracing::{debug, info, warn};
 
 use super::schema::BookmarkSchema;
@@ -47,7 +47,7 @@ impl BookmarkIndexer {
         content: Option<&str>,
     ) -> Result<TantivyDocument> {
         let domain = extract_domain(&bookmark.url).unwrap_or_default();
-        
+
         let date_added = parse_date(&bookmark.date_added).unwrap_or(0);
         let date_modified = parse_date(&bookmark.date_modified).unwrap_or(0);
 
@@ -55,11 +55,11 @@ impl BookmarkIndexer {
         doc.add_text(self.schema.id, &bookmark.id);
         doc.add_text(self.schema.url, &bookmark.url);
         doc.add_text(self.schema.title, &bookmark.name);
-        
+
         if let Some(content_text) = content {
             doc.add_text(self.schema.content, content_text);
         }
-        
+
         let folder_path = bookmark.folder_path.join("/");
         doc.add_text(self.schema.folder_path, &folder_path);
         doc.add_text(self.schema.domain, &domain);
@@ -72,16 +72,16 @@ impl BookmarkIndexer {
     /// Build or rebuild the entire index
     pub fn build_index(&self, bookmarks: &[FlatBookmark]) -> Result<()> {
         info!("Building index for {} bookmarks", bookmarks.len());
-        
+
         let mut writer = self.create_writer(50_000_000)?;
-        
+
         // Clear existing documents
         writer.delete_all_documents()?;
 
         // Index each bookmark
         let mut success_count = 0;
         let mut error_count = 0;
-        
+
         for bookmark in bookmarks {
             match self.index_bookmark(&mut writer, bookmark, None) {
                 Ok(_) => success_count += 1,
@@ -93,7 +93,7 @@ impl BookmarkIndexer {
         }
 
         writer.commit().context("Failed to commit index")?;
-        
+
         info!(
             "Index built: {} successful, {} errors",
             success_count, error_count
@@ -103,36 +103,32 @@ impl BookmarkIndexer {
     }
 
     /// Update a single bookmark in the index
-    pub fn update_bookmark(
-        &self,
-        bookmark: &FlatBookmark,
-        content: Option<&str>,
-    ) -> Result<()> {
+    pub fn update_bookmark(&self, bookmark: &FlatBookmark, content: Option<&str>) -> Result<()> {
         let mut writer = self.create_writer(10_000_000)?;
-        
+
         // Delete old document
         let id_term = tantivy::Term::from_field_text(self.schema.id, &bookmark.id);
         writer.delete_term(id_term);
-        
+
         // Add updated document
         self.index_bookmark(&mut writer, bookmark, content)?;
-        
+
         writer.commit()?;
         debug!("Updated bookmark {} in index", bookmark.id);
-        
+
         Ok(())
     }
 
     /// Delete a bookmark from the index
     pub fn delete_bookmark(&self, bookmark_id: &str) -> Result<()> {
         let mut writer = self.create_writer(10_000_000)?;
-        
+
         let id_term = tantivy::Term::from_field_text(self.schema.id, bookmark_id);
         writer.delete_term(id_term);
-        
+
         writer.commit()?;
         debug!("Deleted bookmark {} from index", bookmark_id);
-        
+
         Ok(())
     }
 }
@@ -179,9 +175,11 @@ mod tests {
         let (_index, schema, _temp) = create_test_index();
         let indexer = BookmarkIndexer::new(_index, schema.clone());
         let bookmark = create_test_bookmark();
-        
-        let doc = indexer.create_document(&bookmark, Some("test content")).unwrap();
-        
+
+        let doc = indexer
+            .create_document(&bookmark, Some("test content"))
+            .unwrap();
+
         // Verify document has all required fields
         assert!(doc.get_first(schema.id).is_some());
         assert!(doc.get_first(schema.url).is_some());
@@ -194,9 +192,11 @@ mod tests {
         let (index, schema, _temp) = create_test_index();
         let indexer = BookmarkIndexer::new(index, schema);
         let bookmark = create_test_bookmark();
-        
+
         let mut writer = indexer.create_writer(10_000_000).unwrap();
-        indexer.index_bookmark(&mut writer, &bookmark, None).unwrap();
+        indexer
+            .index_bookmark(&mut writer, &bookmark, None)
+            .unwrap();
         writer.commit().unwrap();
     }
 
@@ -215,7 +215,10 @@ mod tests {
 
     #[test]
     fn test_parse_date() {
-        assert_eq!(parse_date(&Some("1234567890".to_string())), Some(1234567890));
+        assert_eq!(
+            parse_date(&Some("1234567890".to_string())),
+            Some(1234567890)
+        );
         assert_eq!(parse_date(&Some("invalid".to_string())), None);
         assert_eq!(parse_date(&None), None);
     }

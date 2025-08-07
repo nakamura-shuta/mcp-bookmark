@@ -1,10 +1,10 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use tantivy::{
+    Index, IndexReader, TantivyDocument, Term,
     collector::TopDocs,
     query::{BooleanQuery, Occur, Query, QueryParser, TermQuery},
     schema::Value,
-    TantivyDocument, Index, IndexReader, Term,
 };
 
 use super::schema::BookmarkSchema;
@@ -33,14 +33,14 @@ impl BookmarkSearcher {
             .reload_policy(tantivy::ReloadPolicy::OnCommitWithDelay)
             .try_into()
             .context("Failed to create index reader")?;
-        
+
         Ok(Self {
             index,
             schema,
             reader,
         })
     }
-    
+
     /// Reload the index reader to see new changes
     pub fn reload(&mut self) -> Result<()> {
         self.reader.reload()?;
@@ -50,13 +50,10 @@ impl BookmarkSearcher {
     /// Simple text search across all text fields
     pub fn search(&self, query: &str, limit: usize) -> Result<Vec<SearchResult>> {
         let searcher = self.reader.searcher();
-        
+
         // Create query parser for text fields
-        let query_parser = QueryParser::for_index(
-            &self.index,
-            self.schema.text_fields(),
-        );
-        
+        let query_parser = QueryParser::for_index(&self.index, self.schema.text_fields());
+
         let query = query_parser
             .parse_query(query)
             .context("Failed to parse search query")?;
@@ -74,23 +71,47 @@ impl BookmarkSearcher {
         Ok(results)
     }
 
+    /// Search only in content field
+    pub fn search_content_only(&self, query: &str, limit: usize) -> Result<Vec<SearchResult>> {
+        let searcher = self.reader.searcher();
+
+        // Create query parser for content field only
+        let query_parser = QueryParser::for_index(&self.index, vec![self.schema.content]);
+
+        let query = query_parser
+            .parse_query(query)
+            .context("Failed to parse content search query")?;
+
+        let top_docs = searcher
+            .search(&query, &TopDocs::with_limit(limit))
+            .context("Content search failed")?;
+
+        let mut results = Vec::new();
+        for (score, doc_address) in top_docs {
+            let doc = searcher.doc(doc_address)?;
+            let mut result = self.doc_to_result(&doc, score)?;
+            // Boost score for content-only search to differentiate it
+            result.score = score * 1.5;
+            results.push(result);
+        }
+
+        Ok(results)
+    }
+
     /// Advanced search with filters
     pub fn search_with_filters(&self, params: &SearchParams) -> Result<Vec<SearchResult>> {
         let searcher = self.reader.searcher();
         let mut subqueries: Vec<(Occur, Box<dyn Query>)> = Vec::new();
-        
+
         // Text query
         if let Some(query_text) = &params.query {
             if !query_text.is_empty() {
-                let query_parser = QueryParser::for_index(
-                    &self.index,
-                    self.schema.text_fields(),
-                );
+                let query_parser = QueryParser::for_index(&self.index, self.schema.text_fields());
                 let text_query = query_parser.parse_query(query_text)?;
                 subqueries.push((Occur::Must, text_query));
             }
         }
-        
+
         // Folder filter
         if let Some(folder) = &params.folder_filter {
             let term = Term::from_field_text(self.schema.folder_path, folder);
@@ -100,7 +121,7 @@ impl BookmarkSearcher {
             ));
             subqueries.push((Occur::Must, folder_query));
         }
-        
+
         // Domain filter
         if let Some(domain) = &params.domain_filter {
             let term = Term::from_field_text(self.schema.domain, domain);
@@ -121,7 +142,7 @@ impl BookmarkSearcher {
         };
 
         let top_docs = searcher.search(&query, &TopDocs::with_limit(params.limit))?;
-        
+
         let mut results = Vec::new();
         for (score, doc_address) in top_docs {
             let doc = searcher.doc(doc_address)?;
@@ -134,12 +155,12 @@ impl BookmarkSearcher {
     /// Get bookmark by ID
     pub fn get_by_id(&self, id: &str) -> Result<Option<SearchResult>> {
         let searcher = self.reader.searcher();
-        
+
         let term = Term::from_field_text(self.schema.id, id);
         let query = TermQuery::new(term, tantivy::schema::IndexRecordOption::Basic);
-        
+
         let top_docs = searcher.search(&query, &TopDocs::with_limit(1))?;
-        
+
         if let Some((score, doc_address)) = top_docs.into_iter().next() {
             let doc = searcher.doc(doc_address)?;
             Ok(Some(self.doc_to_result(&doc, score)?))
@@ -152,7 +173,7 @@ impl BookmarkSearcher {
     pub fn get_stats(&self) -> Result<IndexStats> {
         let searcher = self.reader.searcher();
         let num_docs = searcher.num_docs();
-        
+
         Ok(IndexStats {
             num_documents: num_docs as usize,
         })
@@ -165,17 +186,17 @@ impl BookmarkSearcher {
         let title = self.get_text_field(doc, self.schema.title)?;
         let folder_path = self.get_text_field(doc, self.schema.folder_path)?;
         let domain = self.get_text_field(doc, self.schema.domain)?;
-        
+
         let date_added = doc
             .get_first(self.schema.date_added)
             .and_then(|v| v.as_i64())
             .unwrap_or(0);
-            
+
         let date_modified = doc
             .get_first(self.schema.date_modified)
             .and_then(|v| v.as_i64())
             .unwrap_or(0);
-        
+
         Ok(SearchResult {
             id,
             url,
@@ -275,10 +296,10 @@ mod tests {
         let schema = BookmarkSchema::new();
         let dir = MmapDirectory::open(temp_dir.path()).unwrap();
         let index = Index::create(dir, schema.schema.clone(), Default::default()).unwrap();
-        
+
         let indexer = BookmarkIndexer::new(index.clone(), schema.clone());
         let searcher = BookmarkSearcher::new(index, schema).unwrap();
-        
+
         (searcher, indexer, temp_dir)
     }
 
@@ -315,18 +336,18 @@ mod tests {
     fn test_simple_search() {
         let (mut searcher, indexer, _temp) = setup_test_index();
         let bookmarks = create_test_bookmarks();
-        
+
         // Index bookmarks
         indexer.build_index(&bookmarks).unwrap();
-        
+
         // Reload the searcher to see committed changes
         searcher.reload().unwrap();
-        
+
         // Search for "rust"
         let results = searcher.search("rust", 10).unwrap();
         assert_eq!(results.len(), 1);
         assert!(results[0].title.contains("Rust"));
-        
+
         // Search for "documentation"
         let results = searcher.search("documentation", 10).unwrap();
         assert_eq!(results.len(), 1);
@@ -337,15 +358,15 @@ mod tests {
     fn test_search_with_folder_filter() {
         let (mut searcher, indexer, _temp) = setup_test_index();
         let bookmarks = create_test_bookmarks();
-        
+
         indexer.build_index(&bookmarks).unwrap();
         searcher.reload().unwrap();
-        
+
         // Search in Tech folder
         let params = SearchParams::new("").with_folder("Bookmarks Bar/Tech");
         let results = searcher.search_with_filters(&params).unwrap();
         assert_eq!(results.len(), 2);
-        
+
         // Search in Personal folder
         let params = SearchParams::new("").with_folder("Bookmarks Bar/Personal");
         let results = searcher.search_with_filters(&params).unwrap();
@@ -356,10 +377,10 @@ mod tests {
     fn test_search_with_domain_filter() {
         let (mut searcher, indexer, _temp) = setup_test_index();
         let bookmarks = create_test_bookmarks();
-        
+
         indexer.build_index(&bookmarks).unwrap();
         searcher.reload().unwrap();
-        
+
         // Search for docs.rs domain
         let params = SearchParams::new("").with_domain("docs.rs");
         let results = searcher.search_with_filters(&params).unwrap();
@@ -371,17 +392,53 @@ mod tests {
     fn test_get_by_id() {
         let (mut searcher, indexer, _temp) = setup_test_index();
         let bookmarks = create_test_bookmarks();
-        
+
         indexer.build_index(&bookmarks).unwrap();
         searcher.reload().unwrap();
-        
+
         // Get bookmark by ID
         let result = searcher.get_by_id("2").unwrap();
         assert!(result.is_some());
         assert_eq!(result.unwrap().id, "2");
-        
+
         // Try non-existent ID
         let result = searcher.get_by_id("999").unwrap();
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_content_only_search() {
+        let (mut searcher, indexer, _temp) = setup_test_index();
+
+        // Create bookmarks with content
+        let bookmarks = vec![FlatBookmark {
+            id: "1".to_string(),
+            name: "Different Title".to_string(),
+            url: "https://www.example.com/".to_string(),
+            date_added: Some("1000000000000".to_string()),
+            date_modified: None,
+            folder_path: vec!["Bookmarks Bar".to_string()],
+        }];
+
+        // Index bookmarks
+        indexer.build_index(&bookmarks).unwrap();
+
+        // Add content for the bookmark
+        indexer
+            .update_bookmark(&bookmarks[0], Some("This page contains Rust information"))
+            .unwrap();
+
+        // Reload searcher
+        searcher.reload().unwrap();
+
+        // Search for content that only exists in content field
+        let results = searcher
+            .search_content_only("Rust information", 10)
+            .unwrap();
+        assert_eq!(results.len(), 1);
+
+        // Search for title text should not find results in content-only search
+        let results = searcher.search_content_only("Different Title", 10).unwrap();
+        assert_eq!(results.len(), 0);
     }
 }

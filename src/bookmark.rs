@@ -279,7 +279,10 @@ impl BookmarkReader {
                 node.folder_path = vec![canonical_name.to_string(), japanese_name.to_string()];
                 if let Some(children) = &mut node.children {
                     for child in children {
-                        child.set_folder_paths(vec![canonical_name.to_string(), japanese_name.to_string()]);
+                        child.set_folder_paths(vec![
+                            canonical_name.to_string(),
+                            japanese_name.to_string(),
+                        ]);
                     }
                 }
             } else {
@@ -288,14 +291,26 @@ impl BookmarkReader {
             }
         }
 
-        setup_root_folder(&mut bookmarks.roots.bookmark_bar, "Bookmarks Bar", BOOKMARK_BAR_JP);
-        setup_root_folder(&mut bookmarks.roots.other, "Other Bookmarks", OTHER_BOOKMARKS_JP);
-        setup_root_folder(&mut bookmarks.roots.synced, "Synced Bookmarks", SYNCED_BOOKMARKS_JP);
+        setup_root_folder(
+            &mut bookmarks.roots.bookmark_bar,
+            "Bookmarks Bar",
+            BOOKMARK_BAR_JP,
+        );
+        setup_root_folder(
+            &mut bookmarks.roots.other,
+            "Other Bookmarks",
+            OTHER_BOOKMARKS_JP,
+        );
+        setup_root_folder(
+            &mut bookmarks.roots.synced,
+            "Synced Bookmarks",
+            SYNCED_BOOKMARKS_JP,
+        );
     }
 
     pub fn get_all_bookmarks(&self) -> Result<Vec<FlatBookmark>> {
         let bookmarks = self.read()?;
-        
+
         // Collect all bookmarks from all root nodes
         let mut all = Vec::new();
         all.extend(bookmarks.roots.bookmark_bar.flatten());
@@ -310,7 +325,8 @@ impl BookmarkReader {
     /// Apply maximum bookmark limit if configured
     fn apply_max_limit(&self, bookmarks: Vec<FlatBookmark>) -> Vec<FlatBookmark> {
         if self.config.max_bookmarks > 0 && bookmarks.len() > self.config.max_bookmarks {
-            bookmarks.into_iter()
+            bookmarks
+                .into_iter()
                 .take(self.config.max_bookmarks)
                 .collect()
         } else {
@@ -330,7 +346,7 @@ impl BookmarkReader {
                     || bookmark.url.to_lowercase().contains(&query_lower)
             })
             .collect();
-            
+
         Ok(results)
     }
 
@@ -340,16 +356,16 @@ impl BookmarkReader {
         }
 
         let bookmarks = self.read()?;
-        
+
         // Find the appropriate root node and adjust path for Japanese environment
         let (root_node, adjusted_path) = self.find_root_node_and_path(&bookmarks, folder_path);
-        
+
         match root_node.and_then(|node| node.find_folder(adjusted_path)) {
             Some(n) => {
                 let all_bookmarks = n.flatten();
                 // Apply filtering based on configuration
                 Ok(self.apply_folder_filter(all_bookmarks))
-            },
+            }
             None => Ok(Vec::new()),
         }
     }
@@ -404,13 +420,13 @@ impl BookmarkReader {
     pub fn list_filtered_folders(&self) -> Result<Vec<Vec<String>>> {
         let bookmarks = self.read()?;
         let all_folders = self.list_all_folders_internal(&bookmarks)?;
-        
+
         // Apply folder filtering based on configuration
         let filtered = all_folders
             .into_iter()
             .filter(|folder_path| self.config.should_include_folder(folder_path))
             .collect();
-        
+
         Ok(filtered)
     }
 

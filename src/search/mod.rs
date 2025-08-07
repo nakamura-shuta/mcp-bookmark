@@ -1,15 +1,15 @@
+pub mod hybrid;
 pub mod indexer;
 pub mod schema;
 pub mod searcher;
-pub mod hybrid;
 
 // Re-export commonly used types
-pub use searcher::{SearchParams, SearchResult};
 pub use hybrid::HybridSearchManager;
+pub use searcher::{SearchParams, SearchResult};
 
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
-use tantivy::{directory::MmapDirectory, Index};
+use tantivy::{Index, directory::MmapDirectory};
 use tracing::{debug, info};
 
 use crate::bookmark::FlatBookmark;
@@ -40,20 +40,18 @@ impl SearchManager {
         });
 
         // Ensure directory exists
-        std::fs::create_dir_all(&index_path)
-            .context("Failed to create index directory")?;
+        std::fs::create_dir_all(&index_path).context("Failed to create index directory")?;
 
         let schema = BookmarkSchema::new();
-        
+
         // Open or create index
         let index = if index_path.join("meta.json").exists() {
             debug!("Opening existing index at {:?}", index_path);
-            Index::open_in_dir(&index_path)
-                .context("Failed to open existing index")?
+            Index::open_in_dir(&index_path).context("Failed to open existing index")?
         } else {
             info!("Creating new index at {:?}", index_path);
-            let mmap_directory = MmapDirectory::open(&index_path)
-                .context("Failed to open index directory")?;
+            let mmap_directory =
+                MmapDirectory::open(&index_path).context("Failed to open index directory")?;
             Index::create(mmap_directory, schema.schema.clone(), Default::default())
                 .context("Failed to create new index")?
         };
@@ -99,6 +97,11 @@ impl SearchManager {
     /// Simple text search
     pub fn search(&self, query: &str, limit: usize) -> Result<Vec<SearchResult>> {
         self.searcher.search(query, limit)
+    }
+
+    /// Search only in content field
+    pub fn search_content_only(&self, query: &str, limit: usize) -> Result<Vec<SearchResult>> {
+        self.searcher.search_content_only(query, limit)
     }
 
     /// Advanced search with filters
@@ -183,7 +186,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let index_path = temp_dir.path().join("test_index");
         let _manager = SearchManager::new(Some(index_path.clone())).unwrap();
-        
+
         // After creation, meta.json should exist
         assert!(index_path.join("meta.json").exists());
     }
@@ -193,26 +196,26 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let mut manager = SearchManager::new(Some(temp_dir.path().to_path_buf())).unwrap();
         let bookmarks = create_test_bookmarks();
-        
+
         // Build index
         manager.build_index(&bookmarks).unwrap();
-        
+
         // Search
         let results = manager.search("Test", 10).unwrap();
         assert_eq!(results.len(), 2);
-        
+
         // Update bookmark
         let mut updated = bookmarks[0].clone();
         updated.name = "Updated Site".to_string();
         manager.update_bookmark(&updated, None).unwrap();
-        
+
         // Search for updated bookmark
         let results = manager.search("Updated", 10).unwrap();
         assert_eq!(results.len(), 1);
-        
+
         // Delete bookmark
         manager.delete_bookmark("1").unwrap();
-        
+
         // Verify deletion
         let result = manager.get_by_id("1").unwrap();
         assert!(result.is_none());
@@ -223,14 +226,14 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let mut manager = SearchManager::new(Some(temp_dir.path().to_path_buf())).unwrap();
         let bookmarks = create_test_bookmarks();
-        
+
         manager.build_index(&bookmarks).unwrap();
-        
+
         // Search with parameters
         let params = SearchParams::new("Test")
             .with_domain("example.com")
             .with_limit(1);
-            
+
         let results = manager.search_advanced(&params).unwrap();
         assert_eq!(results.len(), 1);
     }

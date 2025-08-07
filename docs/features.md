@@ -16,6 +16,8 @@ Chrome Bookmark MCP Serverは、Model Context Protocol (MCP)を通じてChrome�
 - ミリ秒単位の高速レスポンス
 - スコアリングによる関連性順位付け
 - 大規模ブックマーク（10,000件以上）にも対応
+- バックグラウンドでコンテンツを自動インデックス化
+- 優先度付き処理（ドキュメントサイトを優先）
 
 **フィルタリングオプション：**
 ```json
@@ -192,7 +194,9 @@ cargo run --release -- --max 1000
 |---------|------|-----------|
 | `search_bookmarks` | 基本的なキーワード検索 | `query: string` |
 | `search_bookmarks_fulltext` | tantivy全文検索 | `query: string`, `folder?: string`, `domain?: string`, `limit?: number` |
+| `search_by_content` | ページコンテンツのみ検索 | `query: string`, `limit?: number` |
 | `list_bookmark_folders` | フォルダ一覧取得 | なし |
+| `get_indexing_status` | インデックス構築状況確認 | なし |
 | `get_bookmark_content` | Webコンテンツ取得 | `url: string` |
 
 ### Resources (MCP Resources)

@@ -39,6 +39,14 @@ pub struct FullTextSearchRequest {
     pub limit: Option<usize>,
 }
 
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ContentSearchRequest {
+    #[schemars(description = "Search query for content-only search")]
+    pub query: String,
+    #[schemars(description = "Maximum number of results (default: 20)")]
+    pub limit: Option<usize>,
+}
+
 #[derive(Debug, Clone)]
 pub struct BookmarkServer {
     pub reader: Arc<BookmarkReader>,
@@ -105,9 +113,9 @@ impl BookmarkServer {
         &self,
         Parameters(req): Parameters<FullTextSearchRequest>,
     ) -> Result<CallToolResult, McpError> {
-        // ハイブリッド検索を使用
+        // 検索パラメータ構築
         let results = if req.folder.is_some() || req.domain.is_some() {
-            // フィルター付きは tantivy のみ
+            // フィルター付き検索
             let mut params = SearchParams::new(&req.query);
             if let Some(folder) = req.folder {
                 params = params.with_folder(folder);
@@ -120,20 +128,30 @@ impl BookmarkServer {
             }
             self.search_manager.search_advanced(&params).await
         } else {
-            // 通常検索はハイブリッド
-            self.search_manager.search(&req.query, req.limit.unwrap_or(20)).await
+            // 通常検索
+            self.search_manager
+                .search(&req.query, req.limit.unwrap_or(20))
+                .await
         };
-        
+
         match results {
             Ok(results) => {
                 // インデックス状況を含める
                 let status = self.search_manager.get_indexing_status();
+                let is_complete = self.search_manager.is_indexing_complete();
+
                 let response = json!({
                     "results": results,
-                    "indexing_status": status,
                     "total_results": results.len(),
+                    "indexing_status": status,
+                    "indexing_complete": is_complete,
+                    "note": if !is_complete && results.is_empty() {
+                        "No results found. Content indexing in progress - results may be incomplete."
+                    } else {
+                        ""
+                    }
                 });
-                
+
                 let content = serde_json::to_string_pretty(&response)
                     .unwrap_or_else(|e| format!("Error serializing results: {e}"));
                 Ok(CallToolResult::success(vec![Content::text(content)]))
@@ -143,20 +161,61 @@ impl BookmarkServer {
             ))])),
         }
     }
-    
+
     #[tool(description = "Get indexing status")]
     fn get_indexing_status(&self) -> Result<CallToolResult, McpError> {
         let status = self.search_manager.get_indexing_status();
         let is_complete = self.search_manager.is_indexing_complete();
-        
+
         let response = json!({
             "status": status,
             "is_complete": is_complete,
         });
-        
-        let content = serde_json::to_string_pretty(&response)
-            .unwrap_or_else(|e| format!("Error: {e}"));
+
+        let content =
+            serde_json::to_string_pretty(&response).unwrap_or_else(|e| format!("Error: {e}"));
         Ok(CallToolResult::success(vec![Content::text(content)]))
+    }
+
+    #[tool(description = "Search bookmarks by page content only")]
+    async fn search_by_content(
+        &self,
+        Parameters(req): Parameters<ContentSearchRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        // コンテンツのみで検索
+        let results = self
+            .search_manager
+            .search_by_content(&req.query, req.limit.unwrap_or(20))
+            .await;
+
+        match results {
+            Ok(results) => {
+                // インデックス状況を含める
+                let status = self.search_manager.get_indexing_status();
+                let is_complete = self.search_manager.is_indexing_complete();
+
+                let response = json!({
+                    "results": results,
+                    "total_results": results.len(),
+                    "indexing_status": status,
+                    "indexing_complete": is_complete,
+                    "note": if !is_complete {
+                        "Content indexing is still in progress. Results may be incomplete."
+                    } else if results.is_empty() {
+                        "No content matches found. Try a different search query."
+                    } else {
+                        "Search completed successfully."
+                    }
+                });
+
+                let content = serde_json::to_string_pretty(&response)
+                    .unwrap_or_else(|e| format!("Error serializing results: {e}"));
+                Ok(CallToolResult::success(vec![Content::text(content)]))
+            }
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
+                "Error searching content: {e}"
+            ))])),
+        }
     }
 
     #[tool(description = "Fetch content from a bookmark URL")]
