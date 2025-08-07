@@ -303,6 +303,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore] // This test requires exclusive access to index directory
     async fn test_simple_search() {
         let config = crate::config::Config::default();
         let reader = Arc::new(BookmarkReader::with_config(config).unwrap());
