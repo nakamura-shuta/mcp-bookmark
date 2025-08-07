@@ -2,7 +2,7 @@ use crate::config::Config;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChromeBookmarks {
@@ -154,14 +154,6 @@ pub struct BookmarkReader {
 }
 
 impl BookmarkReader {
-    pub fn new() -> Result<Self> {
-        let bookmarks_path = Self::find_bookmarks_path()?;
-        Ok(Self {
-            bookmarks_path,
-            config: Config::default(),
-        })
-    }
-
     pub fn with_config(config: Config) -> Result<Self> {
         // プロファイル名指定がある場合は優先的に使用
         let bookmarks_path = if let Some(profile_name) = &config.profile_name {
@@ -257,48 +249,6 @@ impl BookmarkReader {
                 )
             }
         }
-    }
-
-    pub fn with_path<P: AsRef<Path>>(path: P) -> Self {
-        Self {
-            bookmarks_path: path.as_ref().to_path_buf(),
-            config: Config::default(),
-        }
-    }
-
-    /// 指定されたフォルダが存在するか検証
-    pub fn validate_folders(&self) -> Result<Vec<String>> {
-        let bookmarks = self.read()?;
-        let all_folders = self.list_all_folders_internal(&bookmarks)?;
-        let mut warnings = Vec::new();
-
-        // include_foldersの検証
-        for include in &self.config.include_folders {
-            if !all_folders
-                .iter()
-                .any(|f| f == include || f.starts_with(include))
-            {
-                warnings.push(format!("Warning: Include folder not found: {include:?}"));
-            }
-        }
-
-        // exclude_foldersの検証
-        for exclude in &self.config.exclude_folders {
-            if !all_folders
-                .iter()
-                .any(|f| f == exclude || f.starts_with(exclude))
-            {
-                warnings.push(format!("Warning: Exclude folder not found: {exclude:?}"));
-            }
-        }
-
-        Ok(warnings)
-    }
-
-    /// 利用可能なフォルダ一覧を表示用に取得
-    pub fn get_available_folders(&self) -> Result<Vec<Vec<String>>> {
-        let bookmarks = self.read()?;
-        self.list_all_folders_internal(&bookmarks)
     }
 
     pub fn read(&self) -> Result<ChromeBookmarks> {
@@ -462,12 +412,6 @@ impl BookmarkReader {
             .into_iter()
             .filter(|b| self.config.should_include_folder(&b.folder_path))
             .collect()
-    }
-
-    /// List all bookmark folders without filtering
-    pub fn list_all_folders(&self) -> Result<Vec<Vec<String>>> {
-        let bookmarks = self.read()?;
-        self.list_all_folders_internal(&bookmarks)
     }
 
     /// List bookmark folders with configuration filtering applied

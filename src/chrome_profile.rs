@@ -107,47 +107,6 @@ impl ProfileResolver {
         anyhow::bail!("Profile '{}' not found", profile_name)
     }
 
-    /// 利用可能な全プロファイルを取得
-    pub fn list_all_profiles(&self) -> Result<Vec<ChromeProfile>> {
-        let state = self.read_local_state()?;
-        let mut profiles = Vec::new();
-
-        if let Some(info_cache) = state.profile.info_cache.as_object() {
-            for (dir_name, profile_info) in info_cache {
-                let display_name = profile_info
-                    .get("name")
-                    .and_then(|n| n.as_str())
-                    .unwrap_or(dir_name)
-                    .to_string();
-
-                let profile_path = self.chrome_base_dir.join(dir_name);
-
-                if profile_path.exists() {
-                    profiles.push(ChromeProfile {
-                        directory_name: dir_name.clone(),
-                        display_name,
-                        path: profile_path,
-                    });
-                }
-            }
-        }
-
-        // Default プロファイルも追加（Local Stateに記載がない場合がある）
-        let default_path = self.chrome_base_dir.join("Default");
-        if default_path.exists() {
-            let has_default = profiles.iter().any(|p| p.directory_name == "Default");
-            if !has_default {
-                profiles.push(ChromeProfile {
-                    directory_name: "Default".to_string(),
-                    display_name: "Default".to_string(),
-                    path: default_path,
-                });
-            }
-        }
-
-        Ok(profiles)
-    }
-
     /// プロファイルディレクトリからBookmarksファイルパスを取得
     pub fn get_bookmarks_path(&self, profile: &ChromeProfile) -> PathBuf {
         profile.path.join("Bookmarks")
@@ -163,21 +122,5 @@ mod tests {
         // プロファイルリゾルバーの作成
         let resolver = ProfileResolver::new();
         assert!(resolver.is_ok() || resolver.is_err()); // 環境依存
-    }
-
-    #[test]
-    fn test_list_profiles() {
-        if let Ok(resolver) = ProfileResolver::new() {
-            let profiles = resolver.list_all_profiles();
-            // Chrome がインストールされていればプロファイルが取得できる
-            if let Ok(profiles) = profiles {
-                for profile in &profiles {
-                    println!(
-                        "Profile: {} ({})",
-                        profile.display_name, profile.directory_name
-                    );
-                }
-            }
-        }
     }
 }

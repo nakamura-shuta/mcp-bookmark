@@ -313,6 +313,6 @@ mod tests {
         // メタデータ検索（コンテンツなし）
         let results = manager.search("test", 10).await.unwrap();
         // 結果は環境依存なので、エラーがないことだけ確認
-        assert!(results.len() >= 0);
+        let _ = results;
     }
 }

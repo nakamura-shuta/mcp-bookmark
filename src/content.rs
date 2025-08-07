@@ -21,18 +21,6 @@ pub struct PageContent {
     pub html_title: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EnrichedBookmark {
-    pub id: String,
-    pub name: String,
-    pub url: String,
-    pub date_added: Option<String>,
-    pub date_modified: Option<String>,
-    pub folder_path: Vec<String>,
-    pub metadata: Option<PageMetadata>,
-    pub content: Option<PageContent>,
-}
-
 #[derive(Debug, Clone)]
 pub struct ContentFetcher {
     client: reqwest::Client,
@@ -191,66 +179,5 @@ impl ContentFetcher {
         }
 
         path.to_string()
-    }
-
-    pub async fn enrich_bookmark(
-        &self,
-        bookmark: crate::bookmark::FlatBookmark,
-        fetch_content: bool,
-        fetch_metadata: bool,
-    ) -> Result<EnrichedBookmark> {
-        let mut enriched = EnrichedBookmark {
-            id: bookmark.id,
-            name: bookmark.name,
-            url: bookmark.url.clone(),
-            date_added: bookmark.date_added,
-            date_modified: bookmark.date_modified,
-            folder_path: bookmark.folder_path,
-            metadata: None,
-            content: None,
-        };
-
-        if !fetch_content && !fetch_metadata {
-            return Ok(enriched);
-        }
-
-        match self.fetch_page(&bookmark.url).await {
-            Ok(html) => {
-                if fetch_metadata {
-                    enriched.metadata = Some(self.extract_metadata(&html, &bookmark.url));
-                }
-                if fetch_content {
-                    enriched.content = Some(self.extract_content(&html));
-                }
-            }
-            Err(e) => {
-                tracing::warn!("Failed to fetch content for {}: {e}", bookmark.url);
-            }
-        }
-
-        Ok(enriched)
-    }
-
-    pub async fn enrich_bookmarks(
-        &self,
-        bookmarks: Vec<crate::bookmark::FlatBookmark>,
-        fetch_content: bool,
-        fetch_metadata: bool,
-    ) -> Vec<EnrichedBookmark> {
-        let mut results = Vec::new();
-
-        for bookmark in bookmarks {
-            match self
-                .enrich_bookmark(bookmark, fetch_content, fetch_metadata)
-                .await
-            {
-                Ok(enriched) => results.push(enriched),
-                Err(e) => {
-                    tracing::error!("Failed to enrich bookmark: {}", e);
-                }
-            }
-        }
-
-        results
     }
 }

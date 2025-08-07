@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.1] - 2025-08-07
+
+### Added
+- Chrome Local State解析によるプロファイル名解決機能
+- 言語非依存フォルダ検索（日本語/英語Chrome両対応）
+- `--profile`と`--folder`コマンドライン引数
+- `CHROME_PROFILE_NAME`と`CHROME_TARGET_FOLDER`環境変数サポート
+- SearchManagerの包括的なユニットテスト（10テスト追加）
+- 統合テストスクリプト (`scripts/test_all_features.sh`)
+
+### Changed
+- 不要なコードとメソッドを整理（使用されていないものを削除）
+- テストスクリプトを統合（個別スクリプトを1つに）
+- コード構造の改善とモジュール化
+
+### Fixed
+- プロファイル設定が日本語Chrome環境で動作しない問題
+- フォルダ名検索が言語設定に依存する問題
+
 ## [0.2.0] - 2025-08-06
 
 ### Added

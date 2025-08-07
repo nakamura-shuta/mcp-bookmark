@@ -3,14 +3,13 @@ pub mod indexer;
 pub mod schema;
 pub mod searcher;
 
-// Re-export commonly used types
-pub use hybrid::HybridSearchManager;
-pub use searcher::{SearchParams, SearchResult};
-
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 use tantivy::{Index, directory::MmapDirectory};
 use tracing::{debug, info};
+
+pub use hybrid::HybridSearchManager;
+pub use searcher::{SearchParams, SearchResult};
 
 use crate::bookmark::FlatBookmark;
 use indexer::BookmarkIndexer;
@@ -70,8 +69,8 @@ impl SearchManager {
 
     /// Build or rebuild the entire index
     pub fn build_index(&mut self, bookmarks: &[FlatBookmark]) -> Result<()> {
+        info!("Building index for {} bookmarks", bookmarks.len());
         self.indexer.build_index(bookmarks)?;
-        // Reload searcher to see the changes
         self.searcher.reload()?;
         Ok(())
     }
@@ -82,6 +81,7 @@ impl SearchManager {
         bookmark: &FlatBookmark,
         content: Option<&str>,
     ) -> Result<()> {
+        debug!("Updating bookmark {} in index", bookmark.id);
         self.indexer.update_bookmark(bookmark, content)?;
         self.searcher.reload()?;
         Ok(())
@@ -164,77 +164,159 @@ mod tests {
         vec![
             FlatBookmark {
                 id: "1".to_string(),
-                name: "Test Site 1".to_string(),
-                url: "https://example.com/1".to_string(),
-                date_added: Some("1000000000000".to_string()),
+                name: "Rust Documentation".to_string(),
+                url: "https://doc.rust-lang.org".to_string(),
+                date_added: None,
                 date_modified: None,
-                folder_path: vec!["Bookmarks Bar".to_string()],
+                folder_path: vec!["Tech".to_string()],
             },
             FlatBookmark {
                 id: "2".to_string(),
-                name: "Test Site 2".to_string(),
-                url: "https://example.com/2".to_string(),
-                date_added: Some("2000000000000".to_string()),
+                name: "Rust Book".to_string(),
+                url: "https://doc.rust-lang.org/book".to_string(),
+                date_added: None,
                 date_modified: None,
-                folder_path: vec!["Bookmarks Bar".to_string()],
+                folder_path: vec!["Tech".to_string(), "Books".to_string()],
             },
         ]
     }
 
     #[test]
-    fn test_manager_creation() {
-        let temp_dir = TempDir::new().unwrap();
-        let index_path = temp_dir.path().join("test_index");
-        let _manager = SearchManager::new(Some(index_path.clone())).unwrap();
-
-        // After creation, meta.json should exist
-        assert!(index_path.join("meta.json").exists());
-    }
-
-    #[test]
-    fn test_index_lifecycle() {
+    fn test_index_creation() {
         let temp_dir = TempDir::new().unwrap();
         let mut manager = SearchManager::new(Some(temp_dir.path().to_path_buf())).unwrap();
         let bookmarks = create_test_bookmarks();
-
-        // Build index
         manager.build_index(&bookmarks).unwrap();
 
-        // Search
-        let results = manager.search("Test", 10).unwrap();
+        let results = manager.search("rust", 10).unwrap();
         assert_eq!(results.len(), 2);
+    }
 
-        // Update bookmark
-        let mut updated = bookmarks[0].clone();
-        updated.name = "Updated Site".to_string();
+    #[test]
+    fn test_update_bookmark() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut manager = SearchManager::new(Some(temp_dir.path().to_path_buf())).unwrap();
+        let bookmarks = create_test_bookmarks();
+        manager.build_index(&bookmarks).unwrap();
+
+        let updated = FlatBookmark {
+            id: "1".to_string(),
+            name: "Updated Rust Docs".to_string(),
+            url: "https://doc.rust-lang.org".to_string(),
+            date_added: None,
+            date_modified: None,
+            folder_path: vec!["Tech".to_string()],
+        };
         manager.update_bookmark(&updated, None).unwrap();
 
-        // Search for updated bookmark
         let results = manager.search("Updated", 10).unwrap();
         assert_eq!(results.len(), 1);
+    }
 
-        // Delete bookmark
+    #[test]
+    fn test_content_search() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut manager = SearchManager::new(Some(temp_dir.path().to_path_buf())).unwrap();
+        let bookmarks = create_test_bookmarks();
+        manager.build_index(&bookmarks).unwrap();
+
+        // Update with content
+        manager
+            .update_bookmark(&bookmarks[0], Some("This is Rust programming content"))
+            .unwrap();
+
+        let results = manager.search_content_only("programming", 10).unwrap();
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn test_delete_bookmark() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut manager = SearchManager::new(Some(temp_dir.path().to_path_buf())).unwrap();
+        let bookmarks = create_test_bookmarks();
+        manager.build_index(&bookmarks).unwrap();
+
+        // Delete first bookmark
         manager.delete_bookmark("1").unwrap();
 
-        // Verify deletion
+        let results = manager.search("rust", 10).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, "2");
+    }
+
+    #[test]
+    fn test_get_by_id() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut manager = SearchManager::new(Some(temp_dir.path().to_path_buf())).unwrap();
+        let bookmarks = create_test_bookmarks();
+        manager.build_index(&bookmarks).unwrap();
+
         let result = manager.get_by_id("1").unwrap();
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().id, "1");
+
+        let result = manager.get_by_id("999").unwrap();
         assert!(result.is_none());
     }
 
     #[test]
-    fn test_advanced_search() {
+    fn test_get_stats() {
         let temp_dir = TempDir::new().unwrap();
         let mut manager = SearchManager::new(Some(temp_dir.path().to_path_buf())).unwrap();
         let bookmarks = create_test_bookmarks();
-
         manager.build_index(&bookmarks).unwrap();
 
-        // Search with parameters
-        let params = SearchParams::new("Test")
-            .with_domain("example.com")
-            .with_limit(1);
+        let stats = manager.get_stats().unwrap();
+        assert_eq!(stats.num_documents, 2);
+    }
 
-        let results = manager.search_advanced(&params).unwrap();
-        assert_eq!(results.len(), 1);
+    #[test]
+    fn test_rebuild_index() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut manager = SearchManager::new(Some(temp_dir.path().to_path_buf())).unwrap();
+        let bookmarks = create_test_bookmarks();
+        manager.build_index(&bookmarks).unwrap();
+
+        // Add new bookmark for rebuild
+        let mut new_bookmarks = bookmarks.clone();
+        new_bookmarks.push(FlatBookmark {
+            id: "3".to_string(),
+            name: "New Bookmark".to_string(),
+            url: "https://example.com".to_string(),
+            date_added: None,
+            date_modified: None,
+            folder_path: vec!["Other".to_string()],
+        });
+
+        manager.rebuild_index(&new_bookmarks).unwrap();
+
+        let results = manager.search("", 10).unwrap();
+        assert_eq!(results.len(), 3);
+    }
+
+    #[test]
+    fn test_index_exists() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut manager = SearchManager::new(Some(temp_dir.path().to_path_buf())).unwrap();
+
+        // Initially false for new index
+        assert!(!manager.index_exists());
+
+        let bookmarks = create_test_bookmarks();
+        manager.build_index(&bookmarks).unwrap();
+
+        // Should be true after building
+        assert!(manager.index_exists());
+    }
+
+    #[test]
+    fn test_get_index_size() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut manager = SearchManager::new(Some(temp_dir.path().to_path_buf())).unwrap();
+        let bookmarks = create_test_bookmarks();
+        manager.build_index(&bookmarks).unwrap();
+
+        let size = manager.get_index_size().unwrap();
+        assert!(size > 0);
     }
 }
