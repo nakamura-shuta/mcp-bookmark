@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use crate::bookmark::BookmarkReader;
 use crate::content::ContentFetcher;
-use crate::search::{HybridSearchManager, SearchParams};
+use crate::search::{ContentIndexManager, SearchParams};
 
 // Tool request/response types
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -51,7 +51,7 @@ pub struct ContentSearchRequest {
 pub struct BookmarkServer {
     pub reader: Arc<BookmarkReader>,
     pub fetcher: Arc<ContentFetcher>,
-    pub search_manager: Arc<HybridSearchManager>,
+    pub search_manager: Arc<ContentIndexManager>,
     tool_router: ToolRouter<Self>,
 }
 
@@ -60,7 +60,7 @@ impl BookmarkServer {
     pub fn new(
         reader: Arc<BookmarkReader>,
         fetcher: Arc<ContentFetcher>,
-        search_manager: Arc<HybridSearchManager>,
+        search_manager: Arc<ContentIndexManager>,
     ) -> Self {
         Self {
             reader,

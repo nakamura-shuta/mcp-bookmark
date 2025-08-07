@@ -1,4 +1,4 @@
-pub mod hybrid;
+pub mod content_index;
 pub mod indexer;
 pub mod schema;
 pub mod searcher;
@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use tantivy::{Index, directory::MmapDirectory};
 use tracing::{debug, info};
 
-pub use hybrid::HybridSearchManager;
+pub use content_index::ContentIndexManager;
 pub use searcher::{SearchParams, SearchResult};
 
 use crate::bookmark::FlatBookmark;

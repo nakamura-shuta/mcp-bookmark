@@ -11,7 +11,7 @@ use config::Config;
 use content::ContentFetcher;
 use mcp_server::BookmarkServer;
 use rmcp::{ServiceExt, transport::stdio};
-use search::HybridSearchManager;
+use search::ContentIndexManager;
 use std::env;
 use std::sync::Arc;
 use tracing_subscriber::{self, EnvFilter};
@@ -143,7 +143,7 @@ async fn main() -> Result<()> {
 
     // 検索マネージャーを初期化
     tracing::info!("検索インデックスを初期化中...");
-    let search_manager = HybridSearchManager::new(reader.clone(), fetcher.clone()).await?;
+    let search_manager = ContentIndexManager::new(reader.clone(), fetcher.clone()).await?;
     let search_manager = Arc::new(search_manager);
 
     tracing::info!("✅ サーバー準備完了！");

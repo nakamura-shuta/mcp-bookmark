@@ -9,9 +9,10 @@ use super::{SearchManager, SearchParams, SearchResult};
 use crate::bookmark::{BookmarkReader, FlatBookmark};
 use crate::content::ContentFetcher;
 
-/// 簡略化された検索マネージャー
+/// コンテンツインデックス管理
+/// バックグラウンドでコンテンツを段階的にインデックス化し、検索機能を提供
 #[derive(Debug, Clone)]
-pub struct HybridSearchManager {
+pub struct ContentIndexManager {
     /// tantivy検索エンジン
     tantivy_search: Arc<Mutex<SearchManager>>,
 
@@ -98,7 +99,7 @@ impl IndexingStatus {
     }
 }
 
-impl HybridSearchManager {
+impl ContentIndexManager {
     /// 新規作成
     pub async fn new(reader: Arc<BookmarkReader>, fetcher: Arc<ContentFetcher>) -> Result<Self> {
         // ブックマーク取得
@@ -294,7 +295,7 @@ mod tests {
         let fetcher = Arc::new(ContentFetcher::new().unwrap());
 
         // 検索マネージャー作成
-        let manager = HybridSearchManager::new(reader, fetcher).await.unwrap();
+        let manager = ContentIndexManager::new(reader, fetcher).await.unwrap();
 
         // インデックス構築状況を確認
         assert!(!manager.is_indexing_complete());
@@ -309,7 +310,7 @@ mod tests {
         let reader = Arc::new(BookmarkReader::with_config(config).unwrap());
         let fetcher = Arc::new(ContentFetcher::new().unwrap());
 
-        let manager = HybridSearchManager::new(reader, fetcher).await.unwrap();
+        let manager = ContentIndexManager::new(reader, fetcher).await.unwrap();
 
         // メタデータ検索（コンテンツなし）
         let results = manager.search("test", 10).await.unwrap();

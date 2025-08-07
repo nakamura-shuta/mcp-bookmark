@@ -37,7 +37,7 @@
 
 ### コード削減
 ```
-- HybridSearchManager: 30%削減
+- ContentIndexManager: 30%削減
 - テストコード: 40%削減
 - メモリ使用量: 50%削減
 ```
