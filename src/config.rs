@@ -15,6 +15,14 @@ pub struct Config {
     /// 最大取得ブックマーク数（0は無制限）
     #[serde(default)]
     pub max_bookmarks: usize,
+
+    /// Chromeプロファイル名（表示名）
+    #[serde(default)]
+    pub profile_name: Option<String>,
+
+    /// 特定フォルダ名で検索（言語非依存）
+    #[serde(default)]
+    pub target_folder: Option<String>,
 }
 
 impl Config {
@@ -118,6 +126,8 @@ pub fn generate_sample_config() -> String {
         ],
         exclude_folders: vec![vec!["Bookmarks Bar".to_string(), "Personal".to_string()]],
         max_bookmarks: 100,
+        profile_name: Some("Nakamura".to_string()),
+        target_folder: Some("hoge".to_string()),
     };
 
     serde_json::to_string_pretty(&sample).unwrap()

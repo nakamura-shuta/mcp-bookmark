@@ -100,6 +100,24 @@ impl BookmarkNode {
         None
     }
 
+    /// フォルダ名で検索（言語非依存）
+    pub fn find_folder_by_name(&self, folder_name: &str) -> Option<&BookmarkNode> {
+        // 自分自身がマッチする場合
+        if self.is_folder() && self.name == folder_name {
+            return Some(self);
+        }
+
+        // 子要素を再帰的に検索
+        if let Some(children) = &self.children {
+            for child in children {
+                if let Some(found) = child.find_folder_by_name(folder_name) {
+                    return Some(found);
+                }
+            }
+        }
+        None
+    }
+
     pub fn collect_all_folders(&self) -> Vec<Vec<String>> {
         let mut folders = Vec::new();
         self.collect_folders_recursive(&mut folders);
@@ -145,7 +163,21 @@ impl BookmarkReader {
     }
 
     pub fn with_config(config: Config) -> Result<Self> {
-        let bookmarks_path = Self::find_bookmarks_path()?;
+        // プロファイル名指定がある場合は優先的に使用
+        let bookmarks_path = if let Some(profile_name) = &config.profile_name {
+            let resolver = crate::chrome_profile::ProfileResolver::new()?;
+            let profile = resolver.resolve_by_name(profile_name)?;
+            let path = resolver.get_bookmarks_path(&profile);
+            tracing::info!(
+                "Using specified profile '{}' ({})",
+                profile.display_name,
+                profile.directory_name
+            );
+            path
+        } else {
+            Self::find_bookmarks_path()?
+        };
+
         Ok(Self {
             bookmarks_path,
             config,
@@ -168,6 +200,23 @@ impl BookmarkReader {
                     "Specified profile '{}' not found, falling back to auto-detection",
                     profile
                 );
+            }
+        }
+
+        // 環境変数でプロファイル名を指定可能
+        if let Ok(profile_name) = std::env::var("CHROME_PROFILE_NAME") {
+            if let Ok(resolver) = crate::chrome_profile::ProfileResolver::new() {
+                if let Ok(profile) = resolver.resolve_by_name(&profile_name) {
+                    let bookmarks_path = resolver.get_bookmarks_path(&profile);
+                    if bookmarks_path.exists() {
+                        tracing::info!(
+                            "Using Chrome profile '{}' ({})",
+                            profile.display_name,
+                            profile.directory_name
+                        );
+                        return Ok(bookmarks_path);
+                    }
+                }
             }
         }
 
@@ -309,6 +358,11 @@ impl BookmarkReader {
     }
 
     pub fn get_all_bookmarks(&self) -> Result<Vec<FlatBookmark>> {
+        // target_folderが指定されている場合は特定フォルダのみ取得
+        if let Some(target_folder) = &self.config.target_folder {
+            return self.get_folder_bookmarks_by_name(target_folder);
+        }
+
         let bookmarks = self.read()?;
 
         // Collect all bookmarks from all root nodes
@@ -438,6 +492,31 @@ impl BookmarkReader {
         folders.extend(bookmarks.roots.synced.collect_all_folders());
 
         Ok(folders)
+    }
+
+    /// フォルダ名で検索してブックマークを取得（言語非依存）
+    pub fn get_folder_bookmarks_by_name(&self, folder_name: &str) -> Result<Vec<FlatBookmark>> {
+        let bookmarks = self.read()?;
+
+        // 各ルートノードから検索
+        let folders = vec![
+            bookmarks
+                .roots
+                .bookmark_bar
+                .find_folder_by_name(folder_name),
+            bookmarks.roots.other.find_folder_by_name(folder_name),
+            bookmarks.roots.synced.find_folder_by_name(folder_name),
+        ];
+
+        // 最初に見つかったフォルダのブックマークを返す
+        if let Some(folder) = folders.into_iter().flatten().next() {
+            tracing::info!("Found folder '{}' in bookmarks", folder_name);
+            let results = folder.flatten();
+            return Ok(self.apply_max_limit(results));
+        }
+
+        tracing::warn!("Folder '{}' not found in bookmarks", folder_name);
+        Ok(Vec::new())
     }
 }
 

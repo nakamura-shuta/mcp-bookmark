@@ -1,4 +1,5 @@
 mod bookmark;
+mod chrome_profile;
 mod config;
 mod content;
 mod mcp_server;
@@ -29,6 +30,16 @@ fn parse_args() -> Result<Config> {
                 print_help();
                 std::process::exit(0);
             }
+            "--profile" if i + 1 < args.len() => {
+                config.profile_name = Some(args[i + 1].clone());
+                i += 2;
+                continue;
+            }
+            "--folder" if i + 1 < args.len() => {
+                config.target_folder = Some(args[i + 1].clone());
+                i += 2;
+                continue;
+            }
             "--exclude" if i + 1 < args.len() => {
                 config.exclude_folders = parse_folder_argument(&args[i + 1]);
                 i += 2;
@@ -47,20 +58,33 @@ fn parse_args() -> Result<Config> {
         i += 1;
     }
 
+    // 環境変数からも読み込み
+    if config.profile_name.is_none() {
+        config.profile_name = env::var("CHROME_PROFILE_NAME").ok();
+    }
+    if config.target_folder.is_none() {
+        config.target_folder = env::var("CHROME_TARGET_FOLDER").ok();
+    }
+
     Ok(config)
 }
 
 /// Print help message
 fn print_help() {
     println!("Chrome Bookmark MCP Server\n");
-    println!("Usage: mcp-bookmark [folder] [max_count]\n");
+    println!("Usage: mcp-bookmark [options]\n");
     println!("Examples:");
     println!("  mcp-bookmark                    # All bookmarks");
     println!("  mcp-bookmark Development         # Only Development folder");
     println!("  mcp-bookmark Development 10      # Max 10 bookmarks from Development");
     println!("  mcp-bookmark Work,Tech 20        # Max 20 bookmarks from Work and Tech\n");
     println!("Advanced options:");
+    println!("  --profile <name>     Chrome profile name (e.g., 'Nakamura')");
+    println!("  --folder <name>      Target folder name (language independent)");
     println!("  --exclude <folders>  Exclude specified folders");
+    println!("\nEnvironment variables:");
+    println!("  CHROME_PROFILE_NAME  Chrome profile name");
+    println!("  CHROME_TARGET_FOLDER Target folder name");
 }
 
 /// Parse folder argument into folder paths
@@ -97,6 +121,12 @@ async fn main() -> Result<()> {
     let config = parse_args()?;
 
     tracing::info!("Starting Chrome Bookmark MCP Server");
+    if let Some(profile_name) = &config.profile_name {
+        tracing::info!("Using profile: {}", profile_name);
+    }
+    if let Some(target_folder) = &config.target_folder {
+        tracing::info!("Target folder: {}", target_folder);
+    }
     if !config.include_folders.is_empty() {
         tracing::info!("Including folders: {:?}", config.include_folders);
     }

@@ -68,11 +68,42 @@ mcp-bookmark                   # 全ブックマーク
 mcp-bookmark Development        # Developmentフォルダのみ
 mcp-bookmark Development 10     # 最大10件
 mcp-bookmark Work,Tech 20       # 複数フォルダを指定
+
+# プロファイルとフォルダ指定
+mcp-bookmark --profile "Nakamura" --folder "hoge"  # 特定プロファイルの特定フォルダ
+mcp-bookmark --exclude Personal,Archive            # 指定フォルダを除外
 ```
 
 ### オプション
 
-特定のChromeプロファイルを使用:
+#### プロファイル名で指定（推奨）
+```json
+{
+  "mcpServers": {
+    "chrome-bookmarks": {
+      "command": "mcp-bookmark",
+      "args": ["--profile", "Nakamura", "--folder", "hoge"]
+    }
+  }
+}
+```
+
+#### 環境変数で指定
+```json
+{
+  "mcpServers": {
+    "chrome-bookmarks": {
+      "command": "mcp-bookmark",
+      "env": {
+        "CHROME_PROFILE_NAME": "Nakamura",
+        "CHROME_TARGET_FOLDER": "hoge"
+      }
+    }
+  }
+}
+```
+
+#### レガシー: プロファイルディレクトリで指定
 ```json
 {
   "mcpServers": {
