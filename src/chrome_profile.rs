@@ -20,7 +20,7 @@ struct ProfileInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChromeProfile {
     pub directory_name: String, // "Default", "Profile 1", etc.
-    pub display_name: String,   // "Nakamura", etc.
+    pub display_name: String,   // "Work", "Personal", etc.
     pub path: PathBuf,
 }
 

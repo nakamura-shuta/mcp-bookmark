@@ -79,7 +79,7 @@ fn print_help() {
     println!("  mcp-bookmark Development 10      # Max 10 bookmarks from Development");
     println!("  mcp-bookmark Work,Tech 20        # Max 20 bookmarks from Work and Tech\n");
     println!("Advanced options:");
-    println!("  --profile <name>     Chrome profile name (e.g., 'Nakamura')");
+    println!("  --profile <name>     Chrome profile name (e.g., 'Work' or 'Profile 1')");
     println!("  --folder <name>      Target folder name (language independent)");
     println!("  --exclude <folders>  Exclude specified folders");
     println!("\nEnvironment variables:");

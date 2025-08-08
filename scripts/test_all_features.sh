@@ -18,16 +18,16 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "🔍 Test 1: Profile and Folder Configuration"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-echo "► Testing profile resolution (Nakamura)..."
-RUST_LOG=info timeout 2 $BINARY --profile "Nakamura" 2>&1 | head -10 || true
+echo "► Testing profile resolution (Work)..."
+RUST_LOG=info timeout 2 $BINARY --profile "Work" 2>&1 | head -10 || true
 
 echo ""
-echo "► Testing profile + folder (Nakamura/hoge)..."
-RUST_LOG=info timeout 2 $BINARY --profile "Nakamura" --folder "hoge" 2>&1 | head -10 || true
+echo "► Testing profile + folder (Work/Development)..."
+RUST_LOG=info timeout 2 $BINARY --profile "Work" --folder "Development" 2>&1 | head -10 || true
 
 echo ""
 echo "► Testing environment variables..."
-CHROME_PROFILE_NAME="Nakamura" CHROME_TARGET_FOLDER="hoge" RUST_LOG=info timeout 2 $BINARY 2>&1 | head -10 || true
+CHROME_PROFILE_NAME="Work" CHROME_TARGET_FOLDER="Development" RUST_LOG=info timeout 2 $BINARY 2>&1 | head -10 || true
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

@@ -2,9 +2,11 @@
   "mcpServers": {
     "chrome-bookmarks": {
       "command": "/Users/nakamura.shuta/dev/rust/mcp-bookmark/target/release/mcp-bookmark",
-      "args": ["test-mcp"],
+      "args": [],
       "env": {
-        "RUST_LOG": "info"
+        "RUST_LOG": "info",
+        "CHROME_PROFILE_NAME": "Nakamura",
+        "CHROME_TARGET_FOLDER": "hoge"
       }
     }
   }

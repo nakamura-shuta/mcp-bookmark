@@ -18,7 +18,7 @@
       "mcpServers": {
         "chrome-bookmarks": {
           "command": "mcp-bookmark",
-          "args": ["--profile", "Nakamura", "--folder", "hoge"]
+          "args": ["--profile", "Work", "--folder", "Development"]
         }
       }
     }
@@ -31,8 +31,8 @@
         "chrome-bookmarks": {
           "command": "mcp-bookmark",
           "env": {
-            "CHROME_PROFILE_NAME": "Nakamura",
-            "CHROME_TARGET_FOLDER": "hoge"
+            "CHROME_PROFILE_NAME": "Work",
+            "CHROME_TARGET_FOLDER": "Development"
           }
         }
       }
@@ -83,7 +83,7 @@
       "mcpServers": {
         "chrome-bookmarks": {
           "command": "mcp-bookmark",
-          "args": ["--profile", "Nakamura", "--folder", "hoge"],
+          "args": ["--profile", "Work", "--folder", "Development"],
           "env": {
             "RUST_LOG": "info"
           }
