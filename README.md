@@ -41,6 +41,25 @@ sudo mv mcp-bookmark /usr/local/bin/
 }
 ```
 
+### プロジェクト単位での設定
+
+プロジェクトのルートディレクトリに`.mcp.json`を配置することで、そのプロジェクト専用のMCP設定を有効にできます。
+
+`.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "chrome-bookmarks": {
+      "command": "mcp-bookmark",
+      "args": ["Development", "100"]
+    }
+  }
+}
+```
+
+この設定により、プロジェクトごとに異なるブックマークフォルダや設定を使い分けることができます。
+
 ### 特定フォルダのみ公開
 
 ```json
