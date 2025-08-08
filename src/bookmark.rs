@@ -90,13 +90,16 @@ impl BookmarkNode {
             return Some(self);
         }
 
+        tracing::trace!("Looking for folder '{}' in '{}'", path[0], self.name);
         if let Some(children) = &self.children {
             for child in children {
                 if child.is_folder() && child.name == path[0] {
+                    tracing::trace!("Found folder '{}', continuing with path: {:?}", child.name, &path[1..]);
                     return child.find_folder(&path[1..]);
                 }
             }
         }
+        tracing::trace!("Folder '{}' not found in '{}'", path[0], self.name);
         None
     }
 
@@ -174,6 +177,14 @@ impl BookmarkReader {
             bookmarks_path,
             config,
         })
+    }
+
+    #[cfg(test)]
+    pub fn new_with_path(bookmarks_path: PathBuf, config: Config) -> Self {
+        Self {
+            bookmarks_path,
+            config,
+        }
     }
 
     /// ブックマークファイルを探す（環境変数またはデフォルト）
@@ -310,7 +321,10 @@ impl BookmarkReader {
     pub fn get_all_bookmarks(&self) -> Result<Vec<FlatBookmark>> {
         // target_folderが指定されている場合は特定フォルダのみ取得
         if let Some(target_folder) = &self.config.target_folder {
-            return self.get_folder_bookmarks_by_name(target_folder);
+            tracing::info!("Fetching bookmarks from target folder: {}", target_folder);
+            let result = self.get_folder_bookmarks_by_name(target_folder)?;
+            tracing::info!("Found {} bookmarks in folder '{}'", result.len(), target_folder);
+            return Ok(result);
         }
 
         let bookmarks = self.read()?;
@@ -439,24 +453,45 @@ impl BookmarkReader {
     }
 
     /// フォルダ名で検索してブックマークを取得（言語非依存）
+    /// スラッシュ区切りでサブフォルダを指定可能（例: "Development/React"）
     pub fn get_folder_bookmarks_by_name(&self, folder_name: &str) -> Result<Vec<FlatBookmark>> {
         let bookmarks = self.read()?;
 
-        // 各ルートノードから検索
-        let folders = vec![
-            bookmarks
-                .roots
-                .bookmark_bar
-                .find_folder_by_name(folder_name),
-            bookmarks.roots.other.find_folder_by_name(folder_name),
-            bookmarks.roots.synced.find_folder_by_name(folder_name),
-        ];
+        // スラッシュ区切りの場合はパスとして処理
+        if folder_name.contains('/') {
+            let path: Vec<String> = folder_name.split('/').map(|s| s.to_string()).collect();
+            tracing::debug!("Searching for folder path: {:?}", path);
+            
+            // 各ルートノードから検索
+            let folders = vec![
+                bookmarks.roots.bookmark_bar.find_folder(&path),
+                bookmarks.roots.other.find_folder(&path),
+                bookmarks.roots.synced.find_folder(&path),
+            ];
 
-        // 最初に見つかったフォルダのブックマークを返す
-        if let Some(folder) = folders.into_iter().flatten().next() {
-            tracing::debug!("Found folder '{}' in bookmarks", folder_name);
-            let results = folder.flatten();
-            return Ok(self.apply_max_limit(results));
+            // 最初に見つかったフォルダのブックマークを返す
+            if let Some(folder) = folders.into_iter().flatten().next() {
+                tracing::debug!("Found folder '{}' in bookmarks", folder_name);
+                let results = folder.flatten();
+                return Ok(self.apply_max_limit(results));
+            }
+        } else {
+            // 単一のフォルダ名として検索（既存の処理）
+            let folders = vec![
+                bookmarks
+                    .roots
+                    .bookmark_bar
+                    .find_folder_by_name(folder_name),
+                bookmarks.roots.other.find_folder_by_name(folder_name),
+                bookmarks.roots.synced.find_folder_by_name(folder_name),
+            ];
+
+            // 最初に見つかったフォルダのブックマークを返す
+            if let Some(folder) = folders.into_iter().flatten().next() {
+                tracing::debug!("Found folder '{}' in bookmarks", folder_name);
+                let results = folder.flatten();
+                return Ok(self.apply_max_limit(results));
+            }
         }
 
         tracing::warn!("Folder '{}' not found in bookmarks", folder_name);
@@ -502,5 +537,174 @@ mod tests {
         };
         assert!(!node.is_folder());
         assert!(node.is_url());
+    }
+
+    #[test]
+    fn test_find_folder_with_path() {
+        // Create a nested folder structure
+        let bookmark_url = BookmarkNode {
+            children: None,
+            date_added: None,
+            date_last_used: None,
+            date_modified: None,
+            guid: "url1".to_string(),
+            id: "4".to_string(),
+            name: "Example URL".to_string(),
+            node_type: "url".to_string(),
+            url: Some("https://example.com".to_string()),
+            folder_path: vec!["Dev".to_string(), "React".to_string()],
+        };
+
+        let react_folder = BookmarkNode {
+            children: Some(vec![bookmark_url]),
+            date_added: None,
+            date_last_used: None,
+            date_modified: None,
+            guid: "react".to_string(),
+            id: "3".to_string(),
+            name: "React".to_string(),
+            node_type: "folder".to_string(),
+            url: None,
+            folder_path: vec!["Dev".to_string(), "React".to_string()],
+        };
+
+        let dev_folder = BookmarkNode {
+            children: Some(vec![react_folder]),
+            date_added: None,
+            date_last_used: None,
+            date_modified: None,
+            guid: "dev".to_string(),
+            id: "2".to_string(),
+            name: "Dev".to_string(),
+            node_type: "folder".to_string(),
+            url: None,
+            folder_path: vec!["Dev".to_string()],
+        };
+
+        let root = BookmarkNode {
+            children: Some(vec![dev_folder]),
+            date_added: None,
+            date_last_used: None,
+            date_modified: None,
+            guid: "root".to_string(),
+            id: "1".to_string(),
+            name: "Bookmarks Bar".to_string(),
+            node_type: "folder".to_string(),
+            url: None,
+            folder_path: vec![],
+        };
+
+        // Test finding nested folders
+        let found = root.find_folder(&["Dev".to_string()]);
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().name, "Dev");
+
+        let found = root.find_folder(&["Dev".to_string(), "React".to_string()]);
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().name, "React");
+
+        // Test non-existent path
+        let found = root.find_folder(&["Dev".to_string(), "Vue".to_string()]);
+        assert!(found.is_none());
+
+        // Test empty path returns root
+        let found = root.find_folder(&[]);
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().name, "Bookmarks Bar");
+    }
+
+    #[test]
+    fn test_get_folder_bookmarks_by_name_with_slash() {
+        use tempfile::TempDir;
+        use std::fs;
+
+        // Create test bookmark data with nested folders
+        let test_data = r#"{
+            "checksum": "test",
+            "roots": {
+                "bookmark_bar": {
+                    "children": [{
+                        "children": [{
+                            "children": [{
+                                "date_added": "13399093688071231",
+                                "date_last_used": "0",
+                                "guid": "test1",
+                                "id": "761",
+                                "name": "React Docs",
+                                "type": "url",
+                                "url": "https://react.dev"
+                            }],
+                            "date_added": "13399093688071231",
+                            "date_modified": "0",
+                            "guid": "react-folder",
+                            "id": "760",
+                            "name": "React",
+                            "type": "folder"
+                        }],
+                        "date_added": "13399093688071231",
+                        "date_modified": "0",
+                        "guid": "dev-folder",
+                        "id": "759",
+                        "name": "Development",
+                        "type": "folder"
+                    }],
+                    "date_added": "13399093688071231",
+                    "date_modified": "0",
+                    "guid": "bookmark-bar",
+                    "id": "1",
+                    "name": "Bookmarks Bar",
+                    "type": "folder"
+                },
+                "other": {
+                    "children": [],
+                    "date_added": "13399093688071231",
+                    "date_modified": "0",
+                    "guid": "other",
+                    "id": "2",
+                    "name": "Other Bookmarks",
+                    "type": "folder"
+                },
+                "synced": {
+                    "children": [],
+                    "date_added": "13399093688071231",
+                    "date_modified": "0",
+                    "guid": "synced",
+                    "id": "3",
+                    "name": "Mobile Bookmarks",
+                    "type": "folder"
+                }
+            },
+            "version": 1
+        }"#;
+
+        // Create temporary directory and file
+        let temp_dir = TempDir::new().unwrap();
+        let bookmark_path = temp_dir.path().join("Bookmarks");
+        fs::write(&bookmark_path, test_data).unwrap();
+
+        // Create BookmarkReader with test config
+        let config = Config {
+            profile_name: None,
+            include_folders: vec![],
+            exclude_folders: vec![],
+            max_bookmarks: 0,
+            target_folder: None,
+        };
+        let reader = BookmarkReader::new_with_path(bookmark_path, config);
+
+        // Test slash-separated path
+        let bookmarks = reader.get_folder_bookmarks_by_name("Development/React").unwrap();
+        assert_eq!(bookmarks.len(), 1);
+        assert_eq!(bookmarks[0].name, "React Docs");
+        assert_eq!(bookmarks[0].url, "https://react.dev");
+
+        // Test single folder name
+        let bookmarks = reader.get_folder_bookmarks_by_name("Development").unwrap();
+        assert_eq!(bookmarks.len(), 1);
+        assert_eq!(bookmarks[0].name, "React Docs");
+
+        // Test non-existent path
+        let bookmarks = reader.get_folder_bookmarks_by_name("Development/Vue").unwrap();
+        assert_eq!(bookmarks.len(), 0);
     }
 }

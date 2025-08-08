@@ -64,7 +64,10 @@ fn parse_args() -> Result<Config> {
         config.profile_name = env::var("CHROME_PROFILE_NAME").ok();
     }
     if config.target_folder.is_none() {
-        config.target_folder = env::var("CHROME_TARGET_FOLDER").ok();
+        if let Ok(folder) = env::var("CHROME_TARGET_FOLDER") {
+            eprintln!("DEBUG: CHROME_TARGET_FOLDER environment variable found: {}", folder);
+            config.target_folder = Some(folder);
+        }
     }
 
     Ok(config)
