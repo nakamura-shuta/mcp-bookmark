@@ -14,7 +14,8 @@ use rmcp::{ServiceExt, transport::stdio};
 use search::ContentIndexManager;
 use std::env;
 use std::sync::Arc;
-use tracing_subscriber::{self, EnvFilter};
+use tracing_subscriber::{self, EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_appender::{non_blocking, rolling};
 
 /// Parse command-line arguments and build configuration
 fn parse_args() -> Result<Config> {
@@ -110,12 +111,47 @@ fn parse_folder_argument(arg: &str) -> Vec<Vec<String>> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize logging
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env().add_directive(tracing::Level::INFO.into()))
-        .with_writer(std::io::stderr)
+    // Initialize logging with file output
+    let log_dir = dirs::data_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("mcp-bookmark")
+        .join("logs");
+    
+    // Create log directory if it doesn't exist
+    std::fs::create_dir_all(&log_dir).ok();
+    
+    // Create file appender with daily rotation
+    let file_appender = rolling::daily(log_dir.clone(), "mcp-bookmark.log");
+    let (non_blocking_file, _guard) = non_blocking(file_appender);
+    
+    // Create console writer for stderr
+    let (non_blocking_console, _guard2) = non_blocking(std::io::stderr());
+    
+    // Set up logging to both file and console
+    let env_filter = EnvFilter::from_default_env()
+        .add_directive(tracing::Level::INFO.into());
+    
+    let file_layer = fmt::layer()
+        .with_writer(non_blocking_file)
         .with_ansi(false)
+        .with_target(true)
+        .with_thread_ids(false)
+        .with_thread_names(false);
+    
+    let console_layer = fmt::layer()
+        .with_writer(non_blocking_console)
+        .with_ansi(false)
+        .with_target(false)
+        .with_thread_ids(false)
+        .with_thread_names(false);
+    
+    tracing_subscriber::registry()
+        .with(env_filter)
+        .with(file_layer)
+        .with(console_layer)
         .init();
+    
+    tracing::info!("Logging to: {}", log_dir.display());
 
     // Parse command-line arguments
     let config = parse_args()?;

@@ -11,6 +11,8 @@ All notable changes to this project will be documented in this file.
 - `CHROME_PROFILE_NAME`と`CHROME_TARGET_FOLDER`環境変数サポート
 - SearchManagerの包括的なユニットテスト（10テスト追加）
 - 統合テストスクリプト (`scripts/test_all_features.sh`)
+- ログファイル出力機能（~/Library/Application Support/mcp-bookmark/logs/）
+- 日次ログローテーション機能
 
 ### Changed
 - 不要なコードとメソッドを整理（使用されていないものを削除）

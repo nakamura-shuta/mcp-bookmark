@@ -124,6 +124,34 @@ ls -lh ~/Library/Application\ Support/Google/Chrome/*/Bookmarks
 
 chrome://version/ でプロファイルパスを確認できます。
 
+## ログファイル
+
+MCPサーバーのログは以下の場所に自動的に保存されます：
+
+### macOS
+```
+~/Library/Application Support/mcp-bookmark/logs/mcp-bookmark.log.YYYY-MM-DD
+```
+
+### ログ設定
+- 日次でローテーション（毎日新しいファイル）
+- ログレベルは環境変数 `RUST_LOG` で制御（デフォルト: info）
+- ファイルとコンソール（stderr）の両方に出力
+
+### ログレベルの変更
+```json
+{
+  "mcpServers": {
+    "chrome-bookmarks": {
+      "command": "mcp-bookmark",
+      "env": {
+        "RUST_LOG": "debug"  // debug, info, warn, error
+      }
+    }
+  }
+}
+```
+
 ## 開発
 
 ### テスト
