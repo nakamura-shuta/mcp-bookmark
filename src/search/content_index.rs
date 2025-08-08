@@ -174,11 +174,11 @@ impl ContentIndexManager {
                 let handle = tokio::spawn(async move {
                     let _permit = sem.acquire().await.unwrap();
 
-                    debug!("📄 コンテンツ取得開始: {}", bookmark.url);
+                    info!("📄 コンテンツ取得開始: {}", bookmark.url);
 
-                    // コンテンツ取得（タイムアウト3秒）
+                    // コンテンツ取得（タイムアウト5秒）
                     let fetch_result =
-                        timeout(Duration::from_secs(3), fetcher.fetch_page(&bookmark.url)).await;
+                        timeout(Duration::from_secs(5), fetcher.fetch_page(&bookmark.url)).await;
 
                     match fetch_result {
                         Ok(Ok(html)) => {
@@ -196,11 +196,11 @@ impl ContentIndexManager {
                             }
                         }
                         Ok(Err(e)) => {
-                            debug!("コンテンツ取得失敗 {}: {}", bookmark.url, e);
+                            warn!("コンテンツ取得失敗 {}: {}", bookmark.url, e);
                             status.errors.fetch_add(1, Ordering::Relaxed);
                         }
                         Err(_) => {
-                            debug!("タイムアウト: {}", bookmark.url);
+                            warn!("タイムアウト (5秒): {}", bookmark.url);
                             status.errors.fetch_add(1, Ordering::Relaxed);
                         }
                     }

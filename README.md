@@ -1,53 +1,33 @@
 # Chrome Bookmark MCP Server
 
-Chromeブックマークを Model Context Protocol (MCP) 経由で AI アシスタントに提供する Rust サーバー
+Chromeブックマークへのアクセスを提供するMCP (Model Context Protocol) サーバー
 
 ## 機能
 
-### リソース
-- `bookmark://tree` - Chrome ブックマーク全体のツリー構造
-- `bookmark://folder/{path}` - 特定フォルダのブックマーク
-
-### ツール
-- `search_bookmarks` - タイトルまたは URL でブックマークを検索（シンプル検索）
-- `search_bookmarks_fulltext` - tantivy による全文検索（タイトル、URL、コンテンツ）
-- `search_by_content` - ページコンテンツのみで検索
-- `get_bookmark_content` - ブックマーク URL からページメタデータを取得
-- `list_bookmark_folders` - 全フォルダ一覧を取得
-- `get_indexing_status` - インデックス構築状況を確認
-
-### 検索システム
-- **tantivy全文検索エンジン**: 高速な全文検索
-- **バックグラウンドインデックス**: 起動後に自動でコンテンツを取得・インデックス化
-- **優先度付きインデックス**: ドキュメントサイト（docs.rs等）を優先的に処理
+- **高速全文検索**: tantivy検索エンジンによるブックマーク内容の検索
+- **自動インデックス**: バックグラウンドでWebページ内容を自動取得
+- **プロファイル対応**: 複数のChromeプロファイルから選択可能
+- **フォルダフィルタ**: 特定フォルダのブックマークのみ公開
 
 ## インストール
 
-### ビルド済みバイナリ（推奨）
-
-#### macOS (Apple Silicon)
+### macOS (Apple Silicon)
 ```bash
-curl -L https://github.com/nakamura-shuta/mcp-bookmark/releases/latest/download/mcp-bookmark-darwin-arm64 -o mcp-bookmark
+curl -L https://github.com/your-org/mcp-bookmark/releases/latest/download/mcp-bookmark-darwin-arm64 -o mcp-bookmark
 chmod +x mcp-bookmark
 sudo mv mcp-bookmark /usr/local/bin/
 ```
 
-#### macOS (Intel)
+### macOS (Intel)
 ```bash
-curl -L https://github.com/nakamura-shuta/mcp-bookmark/releases/latest/download/mcp-bookmark-darwin-x64 -o mcp-bookmark
+curl -L https://github.com/your-org/mcp-bookmark/releases/latest/download/mcp-bookmark-darwin-x64 -o mcp-bookmark
 chmod +x mcp-bookmark
 sudo mv mcp-bookmark /usr/local/bin/
 ```
 
-### ソースからビルド
-```bash
-git clone https://github.com/nakamura-shuta/mcp-bookmark.git
-cd mcp-bookmark
-cargo build --release
-sudo cp target/release/mcp-bookmark /usr/local/bin/
-```
+## 設定
 
-## Claude Codeの設定
+### 基本設定
 
 `~/.config/claude/config.json`:
 
@@ -61,113 +41,89 @@ sudo cp target/release/mcp-bookmark /usr/local/bin/
 }
 ```
 
+### 特定フォルダのみ公開
+
+```json
+{
+  "mcpServers": {
+    "chrome-bookmarks": {
+      "command": "mcp-bookmark",
+      "args": ["Development", "100"]
+    }
+  }
+}
+```
+
+### プロファイル指定
+
+```json
+{
+  "mcpServers": {
+    "chrome-bookmarks": {
+      "command": "mcp-bookmark",
+      "args": ["--profile", "Work"]
+    }
+  }
+}
+```
+
 ## 使い方
 
+### コマンドライン
+
 ```bash
-mcp-bookmark                   # 全ブックマーク
-mcp-bookmark Development        # Developmentフォルダのみ
-mcp-bookmark Development 10     # 最大10件
-mcp-bookmark Work,Tech 20       # 複数フォルダを指定
+mcp-bookmark                        # 全ブックマーク
+mcp-bookmark Development            # Developmentフォルダのみ
+mcp-bookmark Development 100        # 最大100件
+mcp-bookmark Work,Tech              # 複数フォルダ
 
-# プロファイルとフォルダ指定
-mcp-bookmark --profile "Work" --folder "Development"  # 特定プロファイルの特定フォルダ
-mcp-bookmark --exclude Personal,Archive            # 指定フォルダを除外
+mcp-bookmark --profile Work         # Workプロファイル
+mcp-bookmark --folder Development   # 特定フォルダ
+mcp-bookmark --exclude Archive      # フォルダ除外
 ```
 
-### オプション
+### AI アシスタントでの使用例
 
-#### プロファイル名で指定（推奨）
-```json
-{
-  "mcpServers": {
-    "chrome-bookmarks": {
-      "command": "mcp-bookmark",
-      "args": ["--profile", "Work", "--folder", "Development"]
-    }
-  }
-}
 ```
-
-#### 環境変数で指定
-```json
-{
-  "mcpServers": {
-    "chrome-bookmarks": {
-      "command": "mcp-bookmark",
-      "env": {
-        "CHROME_PROFILE_NAME": "Work",
-        "CHROME_TARGET_FOLDER": "Development"
-      }
-    }
-  }
-}
-```
-
-#### レガシー: プロファイルディレクトリで指定
-```json
-{
-  "mcpServers": {
-    "chrome-bookmarks": {
-      "command": "mcp-bookmark",
-      "env": {"CHROME_PROFILE": "Profile 1"}
-    }
-  }
-}
+「Developmentフォルダのブックマークを検索して」
+「React関連のドキュメントを探して」
+「最近追加したブックマークを表示」
 ```
 
 ## トラブルシューティング
 
-Chromeプロファイルの確認:
+### Chromeプロファイルの確認
+
 ```bash
-ls -lh ~/Library/Application\ Support/Google/Chrome/*/Bookmarks
+# プロファイル一覧
+ls ~/Library/Application\ Support/Google/Chrome/*/Bookmarks
+
+# chrome://version/ でプロファイルパスを確認
 ```
 
-chrome://version/ でプロファイルパスを確認できます。
+### ログファイル
 
-## ログファイル
-
-MCPサーバーのログは以下の場所に自動的に保存されます：
-
-### macOS
 ```
-~/Library/Application Support/mcp-bookmark/logs/mcp-bookmark.log.YYYY-MM-DD
+~/Library/Application Support/mcp-bookmark/logs/
 ```
 
-### ログ設定
-- 日次でローテーション（毎日新しいファイル）
-- ログレベルは環境変数 `RUST_LOG` で制御（デフォルト: info）
-- ファイルとコンソール（stderr）の両方に出力
-
-### ログレベルの変更
+ログレベル変更:
 ```json
 {
   "mcpServers": {
     "chrome-bookmarks": {
       "command": "mcp-bookmark",
-      "env": {
-        "RUST_LOG": "debug"  // debug, info, warn, error
-      }
+      "env": {"RUST_LOG": "debug"}
     }
   }
 }
 ```
 
-## 開発
+## 検索インデックス
 
-### テスト
-```bash
-cargo test --release
+インデックスは自動的に構築され、以下に保存されます：
 ```
-
-### プロジェクト構造
-```
-src/
-├── main.rs           # エントリーポイント
-├── mcp_server.rs     # MCP サーバー実装
-├── bookmark.rs       # ブックマーク読み取り
-├── content.rs        # Web コンテンツ取得
-├── config.rs         # 設定管理
-└── cache.rs          # キャッシュ機能
+~/Library/Application Support/mcp-bookmark/index/
 ```
 
 ## ライセンス

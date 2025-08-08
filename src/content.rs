@@ -30,7 +30,8 @@ impl ContentFetcher {
     pub fn new() -> Result<Self> {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(10))
-            .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
+            .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+            .redirect(reqwest::redirect::Policy::limited(5))
             .build()
             .context("Failed to create HTTP client")?;
 
@@ -43,10 +44,18 @@ impl ContentFetcher {
             .get(url)
             .send()
             .await
-            .with_context(|| format!("Failed to fetch URL: {url}"))?;
+            .map_err(|e| {
+                // Log detailed error information
+                tracing::warn!("Fetch error for {}: {:?}", url, e);
+                anyhow::anyhow!("Failed to fetch URL: {} - Error: {}", url, e)
+            })?;
 
-        if !response.status().is_success() {
-            anyhow::bail!("HTTP error: {}", response.status());
+        let status = response.status();
+        if !status.is_success() {
+            if status.is_redirection() {
+                tracing::warn!("Unexpected redirect for {}: status {}", url, status);
+            }
+            anyhow::bail!("HTTP error for {}: status {}", url, status);
         }
 
         let html = response
