@@ -19,6 +19,9 @@ All notable changes to this project will be documented in this file.
 - テストスクリプトを統合（個別スクリプトを1つに）
 - コード構造の改善とモジュール化
 - HybridSearchManagerをContentIndexManagerに名称変更（より適切な名前に）
+- ログレベルを最適化（詳細情報はDEBUG、重要情報のみINFO）
+- tantivyライブラリのログを抑制
+- 進捗ログを10%刻みに変更
 
 ### Fixed
 - プロファイル設定が日本語Chrome環境で動作しない問題
