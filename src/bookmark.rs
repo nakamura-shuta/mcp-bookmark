@@ -160,7 +160,7 @@ impl BookmarkReader {
             let resolver = crate::chrome_profile::ProfileResolver::new()?;
             let profile = resolver.resolve_by_name(profile_name)?;
             let path = resolver.get_bookmarks_path(&profile);
-            tracing::info!(
+            tracing::debug!(
                 "Using specified profile '{}' ({})",
                 profile.display_name,
                 profile.directory_name
@@ -185,7 +185,7 @@ impl BookmarkReader {
                 "Library/Application Support/Google/Chrome/{profile}/Bookmarks"
             ));
             if path.exists() {
-                tracing::info!("Using Chrome profile: {}", profile);
+                tracing::debug!("Using Chrome profile: {}", profile);
                 return Ok(path);
             } else {
                 tracing::warn!(
@@ -201,7 +201,7 @@ impl BookmarkReader {
                 if let Ok(profile) = resolver.resolve_by_name(&profile_name) {
                     let bookmarks_path = resolver.get_bookmarks_path(&profile);
                     if bookmarks_path.exists() {
-                        tracing::info!(
+                        tracing::debug!(
                             "Using Chrome profile '{}' ({})",
                             profile.display_name,
                             profile.directory_name
@@ -454,7 +454,7 @@ impl BookmarkReader {
 
         // 最初に見つかったフォルダのブックマークを返す
         if let Some(folder) = folders.into_iter().flatten().next() {
-            tracing::info!("Found folder '{}' in bookmarks", folder_name);
+            tracing::debug!("Found folder '{}' in bookmarks", folder_name);
             let results = folder.flatten();
             return Ok(self.apply_max_limit(results));
         }

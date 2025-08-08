@@ -71,7 +71,7 @@ impl BookmarkIndexer {
 
     /// Build or rebuild the entire index
     pub fn build_index(&self, bookmarks: &[FlatBookmark]) -> Result<()> {
-        info!("Building index for {} bookmarks", bookmarks.len());
+        debug!("Building index for {} bookmarks", bookmarks.len());
 
         let mut writer = self.create_writer(50_000_000)?;
 
@@ -94,10 +94,17 @@ impl BookmarkIndexer {
 
         writer.commit().context("Failed to commit index")?;
 
-        info!(
-            "Index built: {} successful, {} errors",
-            success_count, error_count
-        );
+        if error_count > 0 {
+            warn!(
+                "Index built with errors: {} successful, {} errors",
+                success_count, error_count
+            );
+        } else {
+            debug!(
+                "Index built successfully: {} documents",
+                success_count
+            );
+        }
 
         Ok(())
     }

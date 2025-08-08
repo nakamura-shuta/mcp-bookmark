@@ -106,13 +106,13 @@ impl ContentIndexManager {
         let bookmarks = reader.get_all_bookmarks()?;
         let total = bookmarks.len();
 
-        info!("📚 検索マネージャーを初期化中 ({}件のブックマーク)", total);
+        debug!("検索マネージャーを初期化中 ({}件のブックマーク)", total);
 
         // SearchManager作成
         let mut search_manager = SearchManager::new(None)?;
 
         // メタデータのみを即座にインデックス
-        info!("📝 メタデータをインデックス化中...");
+        debug!("メタデータをインデックス化中...");
         search_manager.build_index(&bookmarks)?;
 
         // マネージャー作成
@@ -135,7 +135,7 @@ impl ContentIndexManager {
         let status = self.indexing_status.clone();
 
         tokio::spawn(async move {
-            info!("🚀 バックグラウンドインデックス構築を開始");
+            info!("バックグラウンドインデックス構築を開始");
 
             // 優先度でソート（重要なドメインを先に）
             let mut bookmarks = bookmarks;
@@ -209,12 +209,21 @@ impl ContentIndexManager {
                     let completed = status.completed.fetch_add(1, Ordering::Relaxed) + 1;
                     let total = status.total.load(Ordering::Relaxed);
 
-                    // 進捗表示
-                    info!("{}", status.status_string());
+                    // 進捗表示（10%刻み、または最初/最後）
+                    let percentage = (completed as f64 / total as f64 * 100.0) as u32;
+                    let prev_percentage = ((completed - 1) as f64 / total as f64 * 100.0) as u32;
+                    
+                    if completed == 1 
+                        || completed == total 
+                        || (percentage / 10 != prev_percentage / 10) // 10%刻み
+                        || (completed == 10 || completed == 50 || completed == 100) // マイルストーン
+                    {
+                        info!("{}", status.status_string());
+                    }
 
                     if completed == total {
                         status.is_complete.store(true, Ordering::Relaxed);
-                        info!("🎉 {}", status.status_string());
+                        info!("🎉 コンテンツインデックス構築完了！");
                     }
                 });
 
@@ -236,7 +245,7 @@ impl ContentIndexManager {
 
         // インデックス構築中で結果が少ない場合の情報提供
         if results.is_empty() && !self.indexing_status.is_complete.load(Ordering::Relaxed) {
-            info!(
+            debug!(
                 "検索結果なし。{} (コンテンツインデックス構築中のため、完全な検索結果ではない可能性があります)",
                 self.indexing_status.status_string()
             );

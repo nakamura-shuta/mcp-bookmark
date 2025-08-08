@@ -48,7 +48,7 @@ impl SearchManager {
             debug!("Opening existing index at {:?}", index_path);
             Index::open_in_dir(&index_path).context("Failed to open existing index")?
         } else {
-            info!("Creating new index at {:?}", index_path);
+            debug!("Creating new index at {:?}", index_path);
             let mmap_directory =
                 MmapDirectory::open(&index_path).context("Failed to open index directory")?;
             Index::create(mmap_directory, schema.schema.clone(), Default::default())
@@ -69,7 +69,7 @@ impl SearchManager {
 
     /// Build or rebuild the entire index
     pub fn build_index(&mut self, bookmarks: &[FlatBookmark]) -> Result<()> {
-        info!("Building index for {} bookmarks", bookmarks.len());
+        debug!("Building index for {} bookmarks", bookmarks.len());
         self.indexer.build_index(bookmarks)?;
         self.searcher.reload()?;
         Ok(())
@@ -126,7 +126,7 @@ impl SearchManager {
 
     /// Clear and rebuild index
     pub fn rebuild_index(&mut self, bookmarks: &[FlatBookmark]) -> Result<()> {
-        info!("Rebuilding entire index");
+        debug!("Rebuilding entire index");
         self.indexer.build_index(bookmarks)?;
         self.searcher.reload()?;
         Ok(())

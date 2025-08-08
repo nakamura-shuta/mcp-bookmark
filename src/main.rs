@@ -129,7 +129,10 @@ async fn main() -> Result<()> {
     
     // Set up logging to both file and console
     let env_filter = EnvFilter::from_default_env()
-        .add_directive(tracing::Level::INFO.into());
+        .add_directive(tracing::Level::INFO.into())
+        .add_directive("tantivy=warn".parse().unwrap())
+        .add_directive("mcp_bookmark::search::indexer=debug".parse().unwrap())
+        .add_directive("mcp_bookmark::search::content_index=info".parse().unwrap());
     
     let file_layer = fmt::layer()
         .with_writer(non_blocking_file)
@@ -151,26 +154,26 @@ async fn main() -> Result<()> {
         .with(console_layer)
         .init();
     
-    tracing::info!("Logging to: {}", log_dir.display());
+    tracing::debug!("Logging to: {}", log_dir.display());
 
     // Parse command-line arguments
     let config = parse_args()?;
 
     tracing::info!("Starting Chrome Bookmark MCP Server");
     if let Some(profile_name) = &config.profile_name {
-        tracing::info!("Using profile: {}", profile_name);
+        tracing::debug!("Using profile: {}", profile_name);
     }
     if let Some(target_folder) = &config.target_folder {
-        tracing::info!("Target folder: {}", target_folder);
+        tracing::debug!("Target folder: {}", target_folder);
     }
     if !config.include_folders.is_empty() {
-        tracing::info!("Including folders: {:?}", config.include_folders);
+        tracing::debug!("Including folders: {:?}", config.include_folders);
     }
     if !config.exclude_folders.is_empty() {
-        tracing::info!("Excluding folders: {:?}", config.exclude_folders);
+        tracing::debug!("Excluding folders: {:?}", config.exclude_folders);
     }
     if config.max_bookmarks > 0 {
-        tracing::info!("Max bookmarks: {}", config.max_bookmarks);
+        tracing::debug!("Max bookmarks: {}", config.max_bookmarks);
     }
 
     // Create MCP server components
@@ -178,12 +181,12 @@ async fn main() -> Result<()> {
     let fetcher = Arc::new(ContentFetcher::new()?);
 
     // 検索マネージャーを初期化
-    tracing::info!("検索インデックスを初期化中...");
+    tracing::debug!("検索インデックスを初期化中...");
     let search_manager = ContentIndexManager::new(reader.clone(), fetcher.clone()).await?;
     let search_manager = Arc::new(search_manager);
 
-    tracing::info!("✅ サーバー準備完了！");
-    tracing::info!("{}", search_manager.get_indexing_status());
+    tracing::info!("サーバー準備完了");
+    tracing::debug!("{}", search_manager.get_indexing_status());
 
     let server = BookmarkServer::new(reader, fetcher, search_manager);
 
