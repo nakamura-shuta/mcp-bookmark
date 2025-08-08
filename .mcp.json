@@ -4,9 +4,9 @@
       "command": "/Users/nakamura.shuta/dev/rust/mcp-bookmark/target/release/mcp-bookmark",
       "args": [],
       "env": {
-        "RUST_LOG": "info",
+        "RUST_LOG": "debug",
         "CHROME_PROFILE_NAME": "Nakamura",
-        "CHROME_TARGET_FOLDER": "hoge"
+        "CHROME_TARGET_FOLDER": "hoge/mcp"
       }
     }
   }

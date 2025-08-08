@@ -73,6 +73,25 @@ sudo mv mcp-bookmark /usr/local/bin/
 }
 ```
 
+### サブフォルダの指定
+
+スラッシュ（`/`）を使ってサブフォルダを指定できます：
+
+```json
+{
+  "mcpServers": {
+    "chrome-bookmarks": {
+      "command": "mcp-bookmark",
+      "env": {
+        "CHROME_TARGET_FOLDER": "Development/React"
+      }
+    }
+  }
+}
+```
+
+この機能により、ネストされた特定のサブフォルダのみを公開できます。
+
 ### プロファイル指定
 
 ```json

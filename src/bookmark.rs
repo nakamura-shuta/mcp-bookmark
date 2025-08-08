@@ -459,7 +459,12 @@ impl BookmarkReader {
 
         // スラッシュ区切りの場合はパスとして処理
         if folder_name.contains('/') {
-            let path: Vec<String> = folder_name.split('/').map(|s| s.to_string()).collect();
+            let path: Vec<String> = folder_name
+                .split('/')
+                .map(|s| s.to_string())
+                .filter(|s| !s.is_empty())  // 空の要素を除外
+                .collect();
+            tracing::info!("Parsing folder path '{}' as: {:?}", folder_name, path);
             tracing::debug!("Searching for folder path: {:?}", path);
             
             // 各ルートノードから検索
