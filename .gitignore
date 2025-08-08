@@ -7,3 +7,6 @@ mcp-bookmark-darwin-*
 mcp-bookmark-linux-*
 mcp-bookmark-windows-*
 mcp-bookmark.exe
+
+# MCPの設定ファイル
+.mcp.json

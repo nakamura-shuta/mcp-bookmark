@@ -39,16 +39,11 @@ impl ContentFetcher {
     }
 
     pub async fn fetch_page(&self, url: &str) -> Result<String> {
-        let response = self
-            .client
-            .get(url)
-            .send()
-            .await
-            .map_err(|e| {
-                // Log detailed error information
-                tracing::warn!("Fetch error for {}: {:?}", url, e);
-                anyhow::anyhow!("Failed to fetch URL: {} - Error: {}", url, e)
-            })?;
+        let response = self.client.get(url).send().await.map_err(|e| {
+            // Log detailed error information
+            tracing::warn!("Fetch error for {}: {:?}", url, e);
+            anyhow::anyhow!("Failed to fetch URL: {} - Error: {}", url, e)
+        })?;
 
         let status = response.status();
         if !status.is_success() {

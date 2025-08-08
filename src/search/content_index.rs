@@ -212,11 +212,12 @@ impl ContentIndexManager {
                     // 進捗表示（10%刻み、または最初/最後）
                     let percentage = (completed as f64 / total as f64 * 100.0) as u32;
                     let prev_percentage = ((completed - 1) as f64 / total as f64 * 100.0) as u32;
-                    
-                    if completed == 1 
-                        || completed == total 
+
+                    if completed == 1
+                        || completed == total
                         || (percentage / 10 != prev_percentage / 10) // 10%刻み
-                        || (completed == 10 || completed == 50 || completed == 100) // マイルストーン
+                        || (completed == 10 || completed == 50 || completed == 100)
+                    // マイルストーン
                     {
                         info!("{}", status.status_string());
                     }

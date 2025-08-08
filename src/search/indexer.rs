@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use tantivy::{Index, IndexWriter, TantivyDocument};
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 use super::schema::BookmarkSchema;
 use crate::bookmark::FlatBookmark;
@@ -100,10 +100,7 @@ impl BookmarkIndexer {
                 success_count, error_count
             );
         } else {
-            debug!(
-                "Index built successfully: {} documents",
-                success_count
-            );
+            debug!("Index built successfully: {} documents", success_count);
         }
 
         Ok(())

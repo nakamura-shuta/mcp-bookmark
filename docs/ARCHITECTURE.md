@@ -8,8 +8,10 @@ Chrome Bookmark MCP Serverは、Model Context Protocol (MCP)を通じてChrome�
 
 ### コア機能
 - `bookmark.rs` - Chromeブックマークの読み込みとパース
+- `chrome_profile.rs` - Chromeプロファイルの自動検出と管理
 - `mcp_server.rs` - MCPプロトコルの実装
 - `search/` - tantivy全文検索エンジン統合
+- `content.rs` - Webページのメタデータ取得
 
 ### 検索システム
 ```
@@ -22,10 +24,11 @@ search/
 ```
 
 ### データフロー
-1. 起動時にChromeのBookmarksファイルを読み込み
-2. メタデータを即座にtantivyでインデックス化
-3. バックグラウンドでWebコンテンツを取得・インデックス化
-4. MCPツール経由で検索クエリを受信・処理
+1. 起動時にChromeプロファイルを自動検出（最大のBookmarksファイルを持つプロファイル）
+2. 選択されたプロファイルのBookmarksファイルを読み込み
+3. メタデータを即座にtantivyでインデックス化
+4. バックグラウンドでWebコンテンツを取得・インデックス化
+5. MCPツール経由で検索クエリを受信・処理
 
 ## 検索優先度
 

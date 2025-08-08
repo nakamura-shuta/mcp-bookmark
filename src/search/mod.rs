@@ -6,7 +6,7 @@ pub mod searcher;
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 use tantivy::{Index, directory::MmapDirectory};
-use tracing::{debug, info};
+use tracing::debug;
 
 pub use content_index::ContentIndexManager;
 pub use searcher::{SearchParams, SearchResult};

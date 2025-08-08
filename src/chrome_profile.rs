@@ -22,6 +22,8 @@ pub struct ChromeProfile {
     pub directory_name: String, // "Default", "Profile 1", etc.
     pub display_name: String,   // "Work", "Personal", etc.
     pub path: PathBuf,
+    pub bookmark_count: Option<usize>, // Number of bookmarks
+    pub size_kb: Option<u64>,          // Size of bookmarks file in KB
 }
 
 /// Chromeプロファイルを管理する構造体
@@ -80,6 +82,8 @@ impl ProfileResolver {
                             directory_name: dir_name.clone(),
                             display_name: name.to_string(),
                             path: profile_path,
+                            bookmark_count: None,
+                            size_kb: None,
                         });
                     }
                 }
@@ -98,6 +102,8 @@ impl ProfileResolver {
                             directory_name: dir_name.clone(),
                             display_name: gaia_name.to_string(),
                             path: profile_path,
+                            bookmark_count: None,
+                            size_kb: None,
                         });
                     }
                 }
@@ -110,6 +116,122 @@ impl ProfileResolver {
     /// プロファイルディレクトリからBookmarksファイルパスを取得
     pub fn get_bookmarks_path(&self, profile: &ChromeProfile) -> PathBuf {
         profile.path.join("Bookmarks")
+    }
+
+    /// 利用可能な全てのプロファイルを取得
+    pub fn list_all_profiles(&self) -> Result<Vec<ChromeProfile>> {
+        let mut profiles = Vec::new();
+        let state = self.read_local_state()?;
+
+        // info_cache から全プロファイルを取得
+        if let Some(info_cache) = state.profile.info_cache.as_object() {
+            for (dir_name, profile_info) in info_cache {
+                let profile_path = self.chrome_base_dir.join(dir_name);
+                let bookmarks_path = profile_path.join("Bookmarks");
+
+                // ブックマークファイルのサイズと件数を取得
+                let (size_kb, bookmark_count) = if bookmarks_path.exists() {
+                    let size = fs::metadata(&bookmarks_path).map(|m| m.len() / 1024).ok();
+
+                    let count = Self::count_bookmarks(&bookmarks_path);
+                    (size, count)
+                } else {
+                    (None, None)
+                };
+
+                // 表示名を取得（nameまたはgaia_name）
+                let display_name = profile_info
+                    .get("name")
+                    .and_then(|n| n.as_str())
+                    .or_else(|| profile_info.get("gaia_name").and_then(|n| n.as_str()))
+                    .unwrap_or(dir_name)
+                    .to_string();
+
+                profiles.push(ChromeProfile {
+                    directory_name: dir_name.clone(),
+                    display_name,
+                    path: profile_path,
+                    bookmark_count,
+                    size_kb,
+                });
+            }
+        }
+
+        // Defaultプロファイルが含まれていない場合は追加
+        if !profiles.iter().any(|p| p.directory_name == "Default") {
+            let default_path = self.chrome_base_dir.join("Default");
+            if default_path.exists() {
+                let bookmarks_path = default_path.join("Bookmarks");
+                let (size_kb, bookmark_count) = if bookmarks_path.exists() {
+                    let size = fs::metadata(&bookmarks_path).map(|m| m.len() / 1024).ok();
+                    let count = Self::count_bookmarks(&bookmarks_path);
+                    (size, count)
+                } else {
+                    (None, None)
+                };
+
+                profiles.push(ChromeProfile {
+                    directory_name: "Default".to_string(),
+                    display_name: "Default".to_string(),
+                    path: default_path,
+                    bookmark_count,
+                    size_kb,
+                });
+            }
+        }
+
+        // サイズ順でソート（大きい順）
+        profiles.sort_by_key(|p| std::cmp::Reverse(p.size_kb.unwrap_or(0)));
+
+        Ok(profiles)
+    }
+
+    /// ブックマークファイルから件数を数える
+    fn count_bookmarks(bookmarks_path: &PathBuf) -> Option<usize> {
+        if let Ok(content) = fs::read_to_string(bookmarks_path) {
+            if let Ok(json) = serde_json::from_str::<Value>(&content) {
+                return Some(Self::count_bookmarks_recursive(&json));
+            }
+        }
+        None
+    }
+
+    /// JSONから再帰的にブックマークをカウント
+    fn count_bookmarks_recursive(value: &Value) -> usize {
+        let mut count = 0;
+
+        if let Some(obj) = value.as_object() {
+            // URLタイプのノードをカウント
+            if let Some(node_type) = obj.get("type").and_then(|t| t.as_str()) {
+                if node_type == "url" {
+                    count += 1;
+                }
+            }
+
+            // 子要素を再帰的に探索
+            if let Some(children) = obj.get("children").and_then(|c| c.as_array()) {
+                for child in children {
+                    count += Self::count_bookmarks_recursive(child);
+                }
+            }
+
+            // ルートノードの場合
+            if let Some(roots) = obj.get("roots").and_then(|r| r.as_object()) {
+                for (_, root) in roots {
+                    count += Self::count_bookmarks_recursive(root);
+                }
+            }
+        }
+
+        count
+    }
+
+    /// 現在アクティブなプロファイルを推測
+    pub fn get_current_profile(&self) -> Option<ChromeProfile> {
+        // 最もサイズが大きいブックマークファイルを持つプロファイルを返す
+        self.list_all_profiles()
+            .ok()
+            .and_then(|profiles| profiles.into_iter().next())
     }
 }
 

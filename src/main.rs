@@ -14,8 +14,8 @@ use rmcp::{ServiceExt, transport::stdio};
 use search::ContentIndexManager;
 use std::env;
 use std::sync::Arc;
-use tracing_subscriber::{self, EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 use tracing_appender::{non_blocking, rolling};
+use tracing_subscriber::{self, EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 /// Parse command-line arguments and build configuration
 fn parse_args() -> Result<Config> {
@@ -66,7 +66,10 @@ fn parse_args() -> Result<Config> {
     if config.target_folder.is_none() {
         if let Ok(folder) = env::var("CHROME_TARGET_FOLDER") {
             tracing::info!("CHROME_TARGET_FOLDER environment variable: {}", folder);
-            eprintln!("DEBUG: CHROME_TARGET_FOLDER environment variable found: {}", folder);
+            eprintln!(
+                "DEBUG: CHROME_TARGET_FOLDER environment variable found: {}",
+                folder
+            );
             config.target_folder = Some(folder);
         } else {
             tracing::debug!("CHROME_TARGET_FOLDER not set in environment");
@@ -122,44 +125,44 @@ async fn main() -> Result<()> {
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("mcp-bookmark")
         .join("logs");
-    
+
     // Create log directory if it doesn't exist
     std::fs::create_dir_all(&log_dir).ok();
-    
+
     // Create file appender with daily rotation
     let file_appender = rolling::daily(log_dir.clone(), "mcp-bookmark.log");
     let (non_blocking_file, _guard) = non_blocking(file_appender);
-    
+
     // Create console writer for stderr
     let (non_blocking_console, _guard2) = non_blocking(std::io::stderr());
-    
+
     // Set up logging to both file and console
     let env_filter = EnvFilter::from_default_env()
         .add_directive(tracing::Level::INFO.into())
         .add_directive("tantivy=warn".parse().unwrap())
         .add_directive("mcp_bookmark::search::indexer=debug".parse().unwrap())
         .add_directive("mcp_bookmark::search::content_index=info".parse().unwrap());
-    
+
     let file_layer = fmt::layer()
         .with_writer(non_blocking_file)
         .with_ansi(false)
         .with_target(true)
         .with_thread_ids(false)
         .with_thread_names(false);
-    
+
     let console_layer = fmt::layer()
         .with_writer(non_blocking_console)
         .with_ansi(false)
         .with_target(false)
         .with_thread_ids(false)
         .with_thread_names(false);
-    
+
     tracing_subscriber::registry()
         .with(env_filter)
         .with(file_layer)
         .with(console_layer)
         .init();
-    
+
     tracing::debug!("Logging to: {}", log_dir.display());
 
     // Parse command-line arguments

@@ -94,7 +94,11 @@ impl BookmarkNode {
         if let Some(children) = &self.children {
             for child in children {
                 if child.is_folder() && child.name == path[0] {
-                    tracing::trace!("Found folder '{}', continuing with path: {:?}", child.name, &path[1..]);
+                    tracing::trace!(
+                        "Found folder '{}', continuing with path: {:?}",
+                        child.name,
+                        &path[1..]
+                    );
                     return child.find_folder(&path[1..]);
                 }
             }
@@ -323,7 +327,11 @@ impl BookmarkReader {
         if let Some(target_folder) = &self.config.target_folder {
             tracing::info!("Fetching bookmarks from target folder: {}", target_folder);
             let result = self.get_folder_bookmarks_by_name(target_folder)?;
-            tracing::info!("Found {} bookmarks in folder '{}'", result.len(), target_folder);
+            tracing::info!(
+                "Found {} bookmarks in folder '{}'",
+                result.len(),
+                target_folder
+            );
             return Ok(result);
         }
 
@@ -462,11 +470,11 @@ impl BookmarkReader {
             let path: Vec<String> = folder_name
                 .split('/')
                 .map(|s| s.to_string())
-                .filter(|s| !s.is_empty())  // 空の要素を除外
+                .filter(|s| !s.is_empty()) // 空の要素を除外
                 .collect();
             tracing::info!("Parsing folder path '{}' as: {:?}", folder_name, path);
             tracing::debug!("Searching for folder path: {:?}", path);
-            
+
             // 各ルートノードから検索
             let folders = vec![
                 bookmarks.roots.bookmark_bar.find_folder(&path),
@@ -620,8 +628,8 @@ mod tests {
 
     #[test]
     fn test_get_folder_bookmarks_by_name_with_slash() {
-        use tempfile::TempDir;
         use std::fs;
+        use tempfile::TempDir;
 
         // Create test bookmark data with nested folders
         let test_data = r#"{
@@ -698,7 +706,9 @@ mod tests {
         let reader = BookmarkReader::new_with_path(bookmark_path, config);
 
         // Test slash-separated path
-        let bookmarks = reader.get_folder_bookmarks_by_name("Development/React").unwrap();
+        let bookmarks = reader
+            .get_folder_bookmarks_by_name("Development/React")
+            .unwrap();
         assert_eq!(bookmarks.len(), 1);
         assert_eq!(bookmarks[0].name, "React Docs");
         assert_eq!(bookmarks[0].url, "https://react.dev");
@@ -709,7 +719,9 @@ mod tests {
         assert_eq!(bookmarks[0].name, "React Docs");
 
         // Test non-existent path
-        let bookmarks = reader.get_folder_bookmarks_by_name("Development/Vue").unwrap();
+        let bookmarks = reader
+            .get_folder_bookmarks_by_name("Development/Vue")
+            .unwrap();
         assert_eq!(bookmarks.len(), 0);
     }
 }

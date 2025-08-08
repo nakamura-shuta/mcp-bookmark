@@ -177,6 +177,52 @@ impl BookmarkServer {
         Ok(CallToolResult::success(vec![Content::text(content)]))
     }
 
+    #[tool(description = "Get list of available Chrome profiles")]
+    fn get_available_profiles(&self) -> Result<CallToolResult, McpError> {
+        use crate::chrome_profile::ProfileResolver;
+
+        match ProfileResolver::new() {
+            Ok(resolver) => {
+                match resolver.list_all_profiles() {
+                    Ok(profiles) => {
+                        // 現在のプロファイルを取得
+                        let current_profile = resolver.get_current_profile();
+                        let current_dir = current_profile.as_ref().map(|p| &p.directory_name);
+
+                        let profile_list: Vec<_> = profiles
+                            .iter()
+                            .map(|p| {
+                                json!({
+                                    "display_name": p.display_name,
+                                    "directory_name": p.directory_name,
+                                    "bookmark_count": p.bookmark_count,
+                                    "size_kb": p.size_kb,
+                                    "is_current": Some(&p.directory_name) == current_dir,
+                                    "path": p.path.to_string_lossy(),
+                                })
+                            })
+                            .collect();
+
+                        let response = json!({
+                            "profiles": profile_list,
+                            "total": profiles.len(),
+                        });
+
+                        let content = serde_json::to_string_pretty(&response)
+                            .unwrap_or_else(|e| format!("Error: {e}"));
+                        Ok(CallToolResult::success(vec![Content::text(content)]))
+                    }
+                    Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
+                        "Error listing profiles: {e}"
+                    ))])),
+                }
+            }
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
+                "Error initializing profile resolver: {e}"
+            ))])),
+        }
+    }
+
     #[tool(description = "Search bookmarks by page content only")]
     async fn search_by_content(
         &self,
