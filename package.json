@@ -1,0 +1,28 @@
+{
+  "name": "mcp-bookmark-tests",
+  "version": "0.2.0",
+  "description": "Test suite for Chrome Bookmark MCP Server",
+  "main": "scripts/test-mcp-inspector.js",
+  "scripts": {
+    "test": "node scripts/test-mcp-inspector.js",
+    "test:debug": "DEBUG=1 node scripts/test-mcp-inspector.js",
+    "test:build": "cargo build --release && npm test",
+    "inspector": "npx @modelcontextprotocol/inspector ./target/release/mcp-bookmark",
+    "inspector:ui": "npx @modelcontextprotocol/inspector --ui ./target/release/mcp-bookmark",
+    "install:inspector": "npm install -g @modelcontextprotocol/inspector"
+  },
+  "keywords": [
+    "mcp",
+    "chrome",
+    "bookmarks",
+    "testing"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@modelcontextprotocol/inspector": "latest"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
