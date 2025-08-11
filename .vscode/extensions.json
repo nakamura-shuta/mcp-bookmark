@@ -1,0 +1,25 @@
+{
+  "recommendations": [
+    // Rust開発
+    "rust-lang.rust-analyzer",
+    "vadimcn.vscode-lldb",
+    "tamasfe.even-better-toml",
+    "serayuzgur.crates",
+    
+    // デバッグ
+    "msjsdiag.debugger-for-chrome",
+    
+    // Git
+    "eamodio.gitlens",
+    
+    // Markdown
+    "yzhang.markdown-all-in-one",
+    
+    // JSON
+    "zainchen.json",
+    
+    // ターミナル
+    "tyriar.sort-lines",
+    "formulahendry.terminal"
+  ]
+}

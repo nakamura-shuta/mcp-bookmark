@@ -1,0 +1,87 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug MCP Server",
+      "cargo": {
+        "args": ["build", "--bin=mcp-bookmark"],
+        "filter": {
+          "name": "mcp-bookmark",
+          "kind": "bin"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "RUST_LOG": "debug",
+        "CHROME_PROFILE_NAME": "Default"
+      }
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug with Profile",
+      "cargo": {
+        "args": ["build", "--bin=mcp-bookmark"],
+        "filter": {
+          "name": "mcp-bookmark",
+          "kind": "bin"
+        }
+      },
+      "args": ["--profile", "Work"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "RUST_LOG": "trace"
+      }
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug MCP Tests",
+      "program": "${workspaceFolder}/scripts/test-mcp-inspector.js",
+      "args": ["./target/release/mcp-bookmark"],
+      "env": {
+        "DEBUG": "1"
+      },
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen"
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Release Test Script",
+      "program": "${workspaceFolder}/scripts/release-test.sh",
+      "args": ["./target/release/mcp-bookmark"],
+      "env": {
+        "DEBUG": "1"
+      },
+      "console": "integratedTerminal"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Run Unit Tests",
+      "cargo": {
+        "args": ["test", "--no-fail-fast"],
+        "filter": {
+          "name": "mcp-bookmark",
+          "kind": "lib"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "RUST_BACKTRACE": "1"
+      }
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Server + Inspector",
+      "configurations": ["Debug MCP Server", "Debug MCP Tests"],
+      "stopAll": true
+    }
+  ]
+}
