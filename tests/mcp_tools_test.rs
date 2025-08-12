@@ -35,7 +35,7 @@ async fn test_server_creation() {
 
     // Test that the server implements ServerHandler
     let info = server.get_info();
-    assert_eq!(info.server_info.name, "chrome-bookmark-mcp");
+    assert_eq!(info.server_info.name, "mcp-bookmark");
     assert_eq!(info.server_info.version, "0.1.0");
 
     println!("✅ Server creation test passed!");

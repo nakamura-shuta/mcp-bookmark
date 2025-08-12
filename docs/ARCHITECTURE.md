@@ -1,87 +1,50 @@
-# アーキテクチャ
+# Architecture
 
-## 概要
+## Overview
 
-Chrome Bookmark MCP Serverは、Model Context Protocol (MCP)を通じてChromeブックマークへのアクセスを提供するRustサーバーです。
+Chrome Bookmark MCP Server provides read-only access to Chrome bookmarks via the Model Context Protocol (MCP). It features full-text search with background indexing and multi-profile support.
 
-## コンポーネント
+## Core Components
 
-### コア機能
-- `bookmark.rs` - Chromeブックマークの読み込みとパース
-- `chrome_profile.rs` - Chromeプロファイルの自動検出と管理
-- `mcp_server.rs` - MCPプロトコルの実装
-- `search/` - tantivy全文検索エンジン統合
-- `content.rs` - Webページのメタデータ取得
+- `bookmark.rs` - Chrome bookmark JSON parsing and filtering
+- `chrome_profile.rs` - Chrome profile detection and management  
+- `mcp_server.rs` - MCP protocol implementation with 6 tools
+- `search/` - Tantivy full-text search engine integration
+- `content.rs` - Web page content fetching
 
-### 検索システム
-```
-search/
-├── mod.rs           # SearchManager - 検索システムの統合
-├── schema.rs        # tantivyスキーマ定義
-├── indexer.rs       # BookmarkIndexer - インデックス構築
-├── searcher.rs      # BookmarkSearcher - 検索実行
-└── content_index.rs # ContentIndexManager - バックグラウンドインデックス
-```
+## MCP Tools (6 Available)
 
-### データフロー
-1. 起動時にChromeプロファイルを自動検出（最大のBookmarksファイルを持つプロファイル）
-2. 選択されたプロファイルのBookmarksファイルを読み込み
-3. メタデータを即座にtantivyでインデックス化
-4. バックグラウンドでWebコンテンツを取得・インデックス化
-5. MCPツール経由で検索クエリを受信・処理
+1. **search_bookmarks** - Search by title or URL
+2. **list_bookmark_folders** - List bookmark folders
+3. **search_bookmarks_fulltext** - Full-text search with content snippets
+4. **get_indexing_status** - Check indexing progress
+5. **get_available_profiles** - List Chrome profiles
+6. **get_bookmark_content** - Get full content (index-first strategy)
 
-## 検索優先度
+## Configuration
 
-ドキュメントサイトを優先的にインデックス化：
-1. docs.rs, doc.rust-lang.org
-2. react.dev, developer.mozilla.org
-3. docs.github.com, docs.aws.amazon.com
-4. その他のサイト
+Set via environment variables:
+- `CHROME_PROFILE_NAME` - Chrome profile (e.g., "Nakamura", "Default")
+- `CHROME_TARGET_FOLDER` - Bookmark folder (e.g., "Development", "Tech/React", "all")
 
-## インデックス管理
+## Index Management
 
-### 保存場所と命名規則
-
-インデックスはプロファイルとフォルダの組み合わせごとに独立管理されます：
-
+### Storage Structure
 ```
 ~/Library/Application Support/mcp-bookmark/
-├── Default_Development/      # Defaultプロファイル、Developmentフォルダ
-├── Work_Tech_React/         # Workプロファイル、Tech/Reactフォルダ（/は_に変換）
-├── Personal_all/            # Personalプロファイル、全ブックマーク
-└── logs/                    # ログファイル
+├── Nakamura_my_test/        # Profile: Nakamura, Folder: my_test
+├── Default_Development/     # Profile: Default, Folder: Development  
+├── Default_all/             # Profile: Default, Folder: all
+└── logs/
 ```
 
-### インデックス分離の仕組み
+### Index Isolation
+- Each profile-folder combination has its own independent index
+- Example keys: `Nakamura_my_test`, `Default_Development`, `Default_all`
+- Subfolder support with slash separator (e.g., "Tech/React" → "Tech_React")
 
-1. **キー生成**: `{プロファイル名}_{フォルダ名}` 形式
-   - プロファイル未指定時: "Default"
-   - フォルダ未指定時: "all"
-   - スラッシュ（/）はアンダースコア（_）に変換
-
-2. **共有と分離**:
-   - 同じプロファイル・フォルダ設定なら、複数プロジェクトで同じインデックスを共有
-   - 異なる設定は完全に独立したインデックスを使用
-   - プロジェクト間での干渉なし
-
-3. **メタデータ管理**: 各インデックスディレクトリに`meta.json`を保存
-   ```json
-   {
-     "version": "1.0.0",
-     "profile": "Work",
-     "folder": "Development",
-     "created_at": "2025-01-12T10:00:00Z",
-     "last_updated": "2025-01-12T14:00:00Z",
-     "bookmark_count": 150,
-     "indexed_count": 145,
-     "index_size_bytes": 524288
-   }
-   ```
-
-### 管理コマンド
-
-```bash
-mcp-bookmark --list-indexes          # インデックス一覧表示
-mcp-bookmark --clear-index [key]     # 特定インデックスをクリア
-mcp-bookmark --clear-all-indexes     # 全インデックスをクリア
-```
+### Search Features
+- **Background indexing** starts on server startup
+- **Priority content fetching** (docs.rs, react.dev, MDN prioritized)
+- **Index-first retrieval** for get_bookmark_content
+- **Full-text search** returns content_snippet and has_full_content fields

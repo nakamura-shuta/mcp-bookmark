@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "chrome-bookmarks": {
+    "mcp-bookmark": {
       "command": "/Users/nakamura.shuta/dev/rust/mcp-bookmark/target/release/mcp-bookmark",
       "args": [],
       "env": {

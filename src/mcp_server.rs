@@ -270,7 +270,7 @@ impl ServerHandler for BookmarkServer {
                 .enable_resources()
                 .build(),
             server_info: Implementation {
-                name: "chrome-bookmark-mcp".to_string(),
+                name: "mcp-bookmark".to_string(),
                 version: "0.1.0".to_string(),
             },
             instructions: Some("Chrome bookmark MCP server provides access to your Chrome bookmarks. You can search bookmarks, list folders, and fetch content from bookmark URLs.".to_string()),

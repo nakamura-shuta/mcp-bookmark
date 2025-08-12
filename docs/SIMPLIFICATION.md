@@ -1,75 +1,56 @@
-# 検索システム簡略化について
+# Search System Design
 
-## 概要
+## Current Implementation
 
-2025-08-06に実施した検索システムの簡略化に関する技術ドキュメント。
+The search system uses a simple, efficient approach focused on practical usage patterns.
 
-## 背景
+## Key Design Decisions
 
-当初、起動直後から検索可能にするため「ハイブリッド検索」システムを実装していました：
-- tantivyで検索 → ヒットなし → フォールバック（シンプル検索）
+### Single Search System
+- **Tantivy-only** full-text search
+- No fallback mechanisms or hybrid approaches
+- Simpler codebase with better maintainability
 
-しかし、以下の理由から過剰最適化と判断：
+### Background Indexing
+- Starts automatically on server startup
+- Prioritizes documentation sites (docs.rs, react.dev, MDN)
+- Indexes content progressively in background
 
-1. **実際の使用パターン**
-   - MCPサーバー起動から最初の検索まで: 10-30秒
-   - その間に主要コンテンツのインデックスは完了
+### Index-First Strategy
+The `get_bookmark_content` tool follows this approach:
+1. Check if content exists in index
+2. If not found, fetch from web
+3. Store in index for future use
 
-2. **複雑性の問題**
-   - 2つの検索システムを維持（メモリ使用量2倍）
-   - フォールバックロジックが複雑
-   - テストが困難（状態により挙動が変化）
+## Search Tools Behavior
 
-## 変更内容
+### search_bookmarks
+- Searches bookmark titles and URLs only
+- Fast metadata-based search
+- Always available immediately
 
-### 削除した機能
-- ❌ フォールバック検索（BookmarkReader::search_bookmarks）
-- ❌ 複雑な条件分岐ロジック
-- ❌ 重複するヘルパー関数
+### search_bookmarks_fulltext  
+- Full-text search through page content
+- Returns `content_snippet` and `has_full_content` fields
+- Includes indexing status in response
+- Supports folder and domain filtering
 
-### 維持した機能
-- ✅ バックグラウンドコンテンツインデックス化
-- ✅ 優先度付きコンテンツ取得（docs.rs優先）
-- ✅ 進捗状況トラッキング
-- ✅ コンテンツ専用検索（search_by_content）
+### get_indexing_status
+- Shows current indexing progress
+- Indicates completion status
+- Helps users understand search readiness
 
-## 成果
+## User Experience Timeline
 
-### コード削減
-```
-- ContentIndexManager: 30%削減
-- テストコード: 40%削減
-- メモリ使用量: 50%削減
-```
+| Time | Available Features |
+|------|-------------------|
+| 0s | Metadata search (titles/URLs) |
+| 10-30s | Core documentation content |
+| ~2-5min | Most bookmark content indexed |
 
-### シンプルな実装
-```rust
-// Before（複雑）
-pub async fn search(&self, query: &str, limit: usize) -> Result<Vec<SearchResult>> {
-    let tantivy_results = self.tantivy_search.search(query, limit)?;
-    if !tantivy_results.is_empty() {
-        return Ok(tantivy_results);
-    }
-    // フォールバック処理...
-}
+## Benefits
 
-// After（シンプル）
-pub async fn search(&self, query: &str, limit: usize) -> Result<Vec<SearchResult>> {
-    let search = self.tantivy_search.lock().await;
-    search.search(query, limit)
-}
-```
-
-## ユーザー体験
-
-変更前後でユーザー体験はほぼ変わりません：
-
-| タイミング | 動作 |
-|-----------|------|
-| 起動直後（0-15秒） | メタデータ検索可能 |
-| 15秒後 | 主要コンテンツ検索可能 |
-| 95秒後 | 全コンテンツ検索可能 |
-
-## 結論
-
-「起動直後の検索」は実際には不要であり、シンプルな実装で十分な性能とUXを提供できることが判明。複雑性を削減し、保守性を大幅に向上させました。
+- **Simplified codebase** - Single search path
+- **Predictable behavior** - No complex fallback logic  
+- **Better performance** - Lower memory usage
+- **Easier testing** - Deterministic behavior

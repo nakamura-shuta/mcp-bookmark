@@ -36,7 +36,7 @@ sudo mv mcp-bookmark /usr/local/bin/
 ```json
 {
   "mcpServers": {
-    "chrome-bookmarks": {
+    "mcp-bookmark": {
       "command": "mcp-bookmark"
     }
   }
@@ -52,7 +52,7 @@ sudo mv mcp-bookmark /usr/local/bin/
 ```json
 {
   "mcpServers": {
-    "chrome-bookmarks": {
+    "mcp-bookmark": {
       "command": "mcp-bookmark",
       "args": ["Development", "100"]
     }
@@ -67,7 +67,7 @@ sudo mv mcp-bookmark /usr/local/bin/
 ```json
 {
   "mcpServers": {
-    "chrome-bookmarks": {
+    "mcp-bookmark": {
       "command": "mcp-bookmark",
       "args": ["Development", "100"]
     }
@@ -82,7 +82,7 @@ sudo mv mcp-bookmark /usr/local/bin/
 ```json
 {
   "mcpServers": {
-    "chrome-bookmarks": {
+    "mcp-bookmark": {
       "command": "mcp-bookmark",
       "env": {
         "CHROME_TARGET_FOLDER": "Development/React"
@@ -99,7 +99,7 @@ sudo mv mcp-bookmark /usr/local/bin/
 ```json
 {
   "mcpServers": {
-    "chrome-bookmarks": {
+    "mcp-bookmark": {
       "command": "mcp-bookmark",
       "args": ["--profile", "Work"]
     }
@@ -196,7 +196,7 @@ ls ~/Library/Application\ Support/Google/Chrome/*/Bookmarks
 ```json
 {
   "mcpServers": {
-    "chrome-bookmarks": {
+    "mcp-bookmark": {
       "command": "mcp-bookmark",
       "env": {"RUST_LOG": "debug"}
     }

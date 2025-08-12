@@ -111,7 +111,7 @@ jobs:
             ```json
             {
               "mcpServers": {
-                "chrome-bookmarks": {
+                "mcp-bookmark": {
                   "command": "mcp-bookmark",
                   "args": []
                 }
