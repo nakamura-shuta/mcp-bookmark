@@ -5,7 +5,7 @@
       "args": [],
       "env": {
         "RUST_LOG": "info",
-        "CHROME_PROFILE_NAME": "Default",
+        "CHROME_PROFILE_NAME": "Profile Name",
         "CHROME_TARGET_FOLDER": "Development"
       }
     }
