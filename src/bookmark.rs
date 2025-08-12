@@ -157,7 +157,7 @@ pub struct FlatBookmark {
 #[derive(Debug, Clone)]
 pub struct BookmarkReader {
     bookmarks_path: PathBuf,
-    config: Config,
+    pub config: Config,
 }
 
 impl BookmarkReader {

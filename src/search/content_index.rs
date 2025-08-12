@@ -108,8 +108,8 @@ impl ContentIndexManager {
 
         debug!("検索マネージャーを初期化中 ({}件のブックマーク)", total);
 
-        // SearchManager作成
-        let mut search_manager = SearchManager::new(None)?;
+        // SearchManager作成 - 設定を使用
+        let mut search_manager = SearchManager::new_with_config(&reader.config)?;
 
         // メタデータのみを即座にインデックス
         debug!("メタデータをインデックス化中...");
@@ -170,6 +170,7 @@ impl ContentIndexManager {
                 let search = search_manager.clone();
                 let fetcher = fetcher.clone();
                 let status = status.clone();
+                let search_for_meta = search_manager.clone();
 
                 let handle = tokio::spawn(async move {
                     let _permit = sem.acquire().await.unwrap();
@@ -223,6 +224,13 @@ impl ContentIndexManager {
                     }
 
                     if completed == total {
+                        // 最終メタデータ更新
+                        let total_val = status.total.load(Ordering::Relaxed);
+                        let errors = status.errors.load(Ordering::Relaxed);
+                        let search = search_for_meta.lock().await;
+                        let _ = search.update_metadata(total_val, completed - errors);
+                        drop(search);
+
                         status.is_complete.store(true, Ordering::Relaxed);
                         info!("🎉 コンテンツインデックス構築完了！");
                     }
@@ -264,24 +272,6 @@ impl ContentIndexManager {
         search.search_advanced(params)
     }
 
-    /// コンテンツのみで検索
-    pub async fn search_by_content(&self, query: &str, limit: usize) -> Result<Vec<SearchResult>> {
-        // コンテンツ検索はtantivyのインデックスが必要
-        let search = self.tantivy_search.lock().await;
-        let results = search.search_content_only(query, limit)?;
-
-        // インデックス構築中で結果が少ない場合の警告
-        if results.is_empty() && !self.indexing_status.is_complete.load(Ordering::Relaxed) {
-            debug!(
-                "コンテンツ検索で結果なし。{} 
-                コンテンツインデックス構築中のため、まだ全てのコンテンツが検索可能ではありません",
-                self.indexing_status.status_string()
-            );
-        }
-
-        Ok(results)
-    }
-
     /// インデックス構築状況を取得
     pub fn get_indexing_status(&self) -> String {
         self.indexing_status.status_string()
@@ -290,6 +280,42 @@ impl ContentIndexManager {
     /// インデックス構築が完了しているか
     pub fn is_indexing_complete(&self) -> bool {
         self.indexing_status.is_complete.load(Ordering::Relaxed)
+    }
+
+    /// URLから完全なコンテンツを取得（インデックスから、なければフェッチ）
+    pub async fn get_content_by_url(&self, url: &str) -> Result<Option<String>> {
+        // まずインデックスから直接コンテンツを取得
+        let search = self.tantivy_search.lock().await;
+
+        // インデックスからフルコンテンツを取得
+        if let Ok(Some(content)) = search.get_content_by_url(url) {
+            info!("インデックスからコンテンツ取得成功: {}", url);
+            return Ok(Some(content));
+        }
+
+        drop(search);
+
+        // インデックスにない場合は新規フェッチ（元のブックマークURLでない場合など）
+        info!("URLのコンテンツを新規取得中: {}", url);
+        match timeout(
+            Duration::from_secs(10),
+            self.content_fetcher.fetch_page(url),
+        )
+        .await
+        {
+            Ok(Ok(html)) => {
+                let content = self.content_fetcher.extract_content(&html);
+                Ok(content.text_content)
+            }
+            Ok(Err(e)) => {
+                warn!("コンテンツ取得失敗: {}: {}", url, e);
+                Ok(None)
+            }
+            Err(_) => {
+                warn!("タイムアウト: {}", url);
+                Ok(None)
+            }
+        }
     }
 }
 

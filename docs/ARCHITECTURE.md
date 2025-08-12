@@ -38,10 +38,50 @@ search/
 3. docs.github.com, docs.aws.amazon.com
 4. その他のサイト
 
-## インデックス保存場所
+## インデックス管理
+
+### 保存場所と命名規則
+
+インデックスはプロファイルとフォルダの組み合わせごとに独立管理されます：
 
 ```
 ~/Library/Application Support/mcp-bookmark/
-├── index/     # tantivy検索インデックス
-└── logs/      # ログファイル
+├── Default_Development/      # Defaultプロファイル、Developmentフォルダ
+├── Work_Tech_React/         # Workプロファイル、Tech/Reactフォルダ（/は_に変換）
+├── Personal_all/            # Personalプロファイル、全ブックマーク
+└── logs/                    # ログファイル
+```
+
+### インデックス分離の仕組み
+
+1. **キー生成**: `{プロファイル名}_{フォルダ名}` 形式
+   - プロファイル未指定時: "Default"
+   - フォルダ未指定時: "all"
+   - スラッシュ（/）はアンダースコア（_）に変換
+
+2. **共有と分離**:
+   - 同じプロファイル・フォルダ設定なら、複数プロジェクトで同じインデックスを共有
+   - 異なる設定は完全に独立したインデックスを使用
+   - プロジェクト間での干渉なし
+
+3. **メタデータ管理**: 各インデックスディレクトリに`meta.json`を保存
+   ```json
+   {
+     "version": "1.0.0",
+     "profile": "Work",
+     "folder": "Development",
+     "created_at": "2025-01-12T10:00:00Z",
+     "last_updated": "2025-01-12T14:00:00Z",
+     "bookmark_count": 150,
+     "indexed_count": 145,
+     "index_size_bytes": 524288
+   }
+   ```
+
+### 管理コマンド
+
+```bash
+mcp-bookmark --list-indexes          # インデックス一覧表示
+mcp-bookmark --clear-index [key]     # 特定インデックスをクリア
+mcp-bookmark --clear-all-indexes     # 全インデックスをクリア
 ```

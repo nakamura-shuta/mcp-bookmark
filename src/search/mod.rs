@@ -4,17 +4,32 @@ pub mod schema;
 pub mod searcher;
 
 use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tantivy::{Index, directory::MmapDirectory};
-use tracing::debug;
+use tracing::{debug, info};
 
 pub use content_index::ContentIndexManager;
 pub use searcher::{SearchParams, SearchResult};
 
 use crate::bookmark::FlatBookmark;
+use crate::config::Config;
 use indexer::BookmarkIndexer;
 use schema::BookmarkSchema;
 use searcher::BookmarkSearcher;
+
+/// Index metadata
+#[derive(Debug, Serialize, Deserialize)]
+pub struct IndexMetadata {
+    pub version: String,
+    pub profile: String,
+    pub folder: String,
+    pub created_at: String,
+    pub last_updated: String,
+    pub bookmark_count: usize,
+    pub indexed_count: usize,
+    pub index_size_bytes: u64,
+}
 
 /// Main search manager that coordinates indexing and searching
 #[derive(Debug)]
@@ -29,8 +44,29 @@ pub struct SearchManager {
 }
 
 impl SearchManager {
+    /// Generate index key from config
+    pub fn get_index_key(config: &Config) -> String {
+        let profile = config.profile_name.as_deref().unwrap_or("Default");
+
+        let folder = config.target_folder.as_deref().unwrap_or("all");
+
+        // Replace slashes with underscores for safe directory names
+        let folder_safe = folder.replace(['/', '\\'], "_");
+
+        format!("{profile}_{folder_safe}")
+    }
+
+    /// Get index path from config
+    fn get_index_path_from_config(config: &Config) -> PathBuf {
+        dirs::data_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("mcp-bookmark")
+            .join(Self::get_index_key(config))
+    }
+
     /// Create a new search manager
     pub fn new(index_path: Option<PathBuf>) -> Result<Self> {
+        // For backward compatibility, use the old path if provided
         let index_path = index_path.unwrap_or_else(|| {
             dirs::data_dir()
                 .unwrap_or_else(|| PathBuf::from("."))
@@ -38,6 +74,32 @@ impl SearchManager {
                 .join("index")
         });
 
+        Self::new_internal(index_path, None)
+    }
+
+    /// Create a new search manager with config
+    pub fn new_with_config(config: &Config) -> Result<Self> {
+        let index_path = Self::get_index_path_from_config(config);
+        let index_key = Self::get_index_key(config);
+
+        info!("=================================================");
+        info!("インデックス設定:");
+        info!(
+            "  プロファイル: {}",
+            config.profile_name.as_deref().unwrap_or("Default")
+        );
+        info!(
+            "  フォルダ: {}",
+            config.target_folder.as_deref().unwrap_or("all")
+        );
+        info!("  インデックス: ~/...mcp-bookmark/{}/", index_key);
+        info!("=================================================");
+
+        Self::new_internal(index_path, Some(config))
+    }
+
+    /// Internal constructor
+    fn new_internal(index_path: PathBuf, config: Option<&Config>) -> Result<Self> {
         // Ensure directory exists
         std::fs::create_dir_all(&index_path).context("Failed to create index directory")?;
 
@@ -45,10 +107,27 @@ impl SearchManager {
 
         // Open or create index
         let index = if index_path.join("meta.json").exists() {
-            debug!("Opening existing index at {:?}", index_path);
+            info!("既存インデックスを使用: {:?}", index_path);
+
+            // Read and log metadata
+            if let Ok(meta_content) = std::fs::read_to_string(index_path.join("meta.json")) {
+                if let Ok(meta) = serde_json::from_str::<IndexMetadata>(&meta_content) {
+                    info!(
+                        "  最終更新: {}, ブックマーク数: {}",
+                        meta.last_updated, meta.bookmark_count
+                    );
+                }
+            }
+
             Index::open_in_dir(&index_path).context("Failed to open existing index")?
         } else {
-            debug!("Creating new index at {:?}", index_path);
+            info!("新規インデックスを作成: {:?}", index_path);
+
+            // Write metadata if config is provided
+            if let Some(cfg) = config {
+                Self::write_metadata(&index_path, cfg)?;
+            }
+
             let mmap_directory =
                 MmapDirectory::open(&index_path).context("Failed to open index directory")?;
             Index::create(mmap_directory, schema.schema.clone(), Default::default())
@@ -65,6 +144,31 @@ impl SearchManager {
             searcher,
             index_path,
         })
+    }
+
+    /// Write metadata to index directory
+    fn write_metadata(path: &Path, config: &Config) -> Result<()> {
+        let meta = IndexMetadata {
+            version: "1.0.0".to_string(),
+            profile: config
+                .profile_name
+                .clone()
+                .unwrap_or_else(|| "Default".to_string()),
+            folder: config
+                .target_folder
+                .clone()
+                .unwrap_or_else(|| "all".to_string()),
+            created_at: chrono::Utc::now().to_rfc3339(),
+            last_updated: chrono::Utc::now().to_rfc3339(),
+            bookmark_count: 0,
+            indexed_count: 0,
+            index_size_bytes: 0,
+        };
+
+        let meta_path = path.join("meta.json");
+        let json = serde_json::to_string_pretty(&meta)?;
+        std::fs::write(meta_path, json)?;
+        Ok(())
     }
 
     /// Build or rebuild the entire index
@@ -114,6 +218,12 @@ impl SearchManager {
         self.searcher.get_by_id(id)
     }
 
+    /// Get full content by URL from index
+    pub fn get_content_by_url(&self, url: &str) -> Result<Option<String>> {
+        // インデックスから直接フルコンテンツを取得
+        self.searcher.get_full_content_by_url(url)
+    }
+
     /// Get index statistics
     pub fn get_stats(&self) -> Result<searcher::IndexStats> {
         self.searcher.get_stats()
@@ -135,6 +245,39 @@ impl SearchManager {
     /// Check if index exists
     pub fn index_exists(&self) -> bool {
         self.index_path.join("meta.json").exists()
+    }
+
+    /// Update metadata after indexing
+    pub fn update_metadata(&self, bookmark_count: usize, indexed_count: usize) -> Result<()> {
+        let meta_path = self.index_path.join("meta.json");
+
+        // Read existing metadata or create new
+        let mut meta = if meta_path.exists() {
+            let content = std::fs::read_to_string(&meta_path)?;
+            serde_json::from_str::<IndexMetadata>(&content)?
+        } else {
+            IndexMetadata {
+                version: "1.0.0".to_string(),
+                profile: "Default".to_string(),
+                folder: "all".to_string(),
+                created_at: chrono::Utc::now().to_rfc3339(),
+                last_updated: chrono::Utc::now().to_rfc3339(),
+                bookmark_count: 0,
+                indexed_count: 0,
+                index_size_bytes: 0,
+            }
+        };
+
+        // Update fields
+        meta.last_updated = chrono::Utc::now().to_rfc3339();
+        meta.bookmark_count = bookmark_count;
+        meta.indexed_count = indexed_count;
+        meta.index_size_bytes = self.get_index_size().unwrap_or(0);
+
+        // Write back
+        let json = serde_json::to_string_pretty(&meta)?;
+        std::fs::write(meta_path, json)?;
+        Ok(())
     }
 }
 

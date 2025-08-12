@@ -11,7 +11,6 @@ use serde_json::json;
 use std::sync::Arc;
 
 use crate::bookmark::BookmarkReader;
-use crate::content::ContentFetcher;
 use crate::search::{ContentIndexManager, SearchParams};
 
 // Tool request/response types
@@ -19,12 +18,6 @@ use crate::search::{ContentIndexManager, SearchParams};
 pub struct SearchBookmarksRequest {
     #[schemars(description = "Search query for bookmark title or URL")]
     pub query: String,
-}
-
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
-pub struct GetBookmarkContentRequest {
-    #[schemars(description = "URL to fetch content from")]
-    pub url: String,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -40,31 +33,23 @@ pub struct FullTextSearchRequest {
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
-pub struct ContentSearchRequest {
-    #[schemars(description = "Search query for content-only search")]
-    pub query: String,
-    #[schemars(description = "Maximum number of results (default: 20)")]
-    pub limit: Option<usize>,
+pub struct GetBookmarkContentRequest {
+    #[schemars(description = "URL of the bookmark to fetch content from")]
+    pub url: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct BookmarkServer {
     pub reader: Arc<BookmarkReader>,
-    pub fetcher: Arc<ContentFetcher>,
     pub search_manager: Arc<ContentIndexManager>,
     tool_router: ToolRouter<Self>,
 }
 
 #[tool_router]
 impl BookmarkServer {
-    pub fn new(
-        reader: Arc<BookmarkReader>,
-        fetcher: Arc<ContentFetcher>,
-        search_manager: Arc<ContentIndexManager>,
-    ) -> Self {
+    pub fn new(reader: Arc<BookmarkReader>, search_manager: Arc<ContentIndexManager>) -> Self {
         Self {
             reader,
-            fetcher,
             search_manager,
             tool_router: Self::tool_router(),
         }
@@ -108,7 +93,7 @@ impl BookmarkServer {
         }
     }
 
-    #[tool(description = "Full-text search through bookmarks (with progressive indexing)")]
+    #[tool(description = "Full-text search through bookmarks including page content")]
     async fn search_bookmarks_fulltext(
         &self,
         Parameters(req): Parameters<FullTextSearchRequest>,
@@ -223,74 +208,53 @@ impl BookmarkServer {
         }
     }
 
-    #[tool(description = "Search bookmarks by page content only")]
-    async fn search_by_content(
-        &self,
-        Parameters(req): Parameters<ContentSearchRequest>,
-    ) -> Result<CallToolResult, McpError> {
-        // コンテンツのみで検索
-        let results = self
-            .search_manager
-            .search_by_content(&req.query, req.limit.unwrap_or(20))
-            .await;
-
-        match results {
-            Ok(results) => {
-                // インデックス状況を含める
-                let status = self.search_manager.get_indexing_status();
-                let is_complete = self.search_manager.is_indexing_complete();
-
-                let response = json!({
-                    "results": results,
-                    "total_results": results.len(),
-                    "indexing_status": status,
-                    "indexing_complete": is_complete,
-                    "note": if !is_complete {
-                        "Content indexing is still in progress. Results may be incomplete."
-                    } else if results.is_empty() {
-                        "No content matches found. Try a different search query."
-                    } else {
-                        "Search completed successfully."
-                    }
-                });
-
-                let content = serde_json::to_string_pretty(&response)
-                    .unwrap_or_else(|e| format!("Error serializing results: {e}"));
-                Ok(CallToolResult::success(vec![Content::text(content)]))
-            }
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
-                "Error searching content: {e}"
-            ))])),
-        }
-    }
-
-    #[tool(description = "Fetch content from a bookmark URL")]
+    #[tool(description = "Get full content of a bookmark from index or fetch if needed")]
     async fn get_bookmark_content(
         &self,
         Parameters(req): Parameters<GetBookmarkContentRequest>,
     ) -> Result<CallToolResult, McpError> {
-        match self.fetcher.fetch_page(&req.url).await {
-            Ok(html) => {
-                let metadata = self.fetcher.extract_metadata(&html, &req.url);
-                let page_content = self.fetcher.extract_content(&html);
+        // URLからコンテンツを取得（インデックスまたは新規フェッチ）
+        match self.search_manager.get_content_by_url(&req.url).await {
+            Ok(Some(content)) => {
+                // ブックマーク情報も取得
+                let search_results = self
+                    .search_manager
+                    .search(&req.url, 1)
+                    .await
+                    .unwrap_or_default();
 
-                let content = json!({
+                let (title, folder_path) = if let Some(result) = search_results.first() {
+                    if result.url == req.url {
+                        (result.title.clone(), Some(result.folder_path.clone()))
+                    } else {
+                        ("Unknown".to_string(), None)
+                    }
+                } else {
+                    ("Unknown".to_string(), None)
+                };
+
+                let response = json!({
                     "url": req.url,
-                    "title": metadata.title,
-                    "description": metadata.description,
-                    "og_title": metadata.og_title,
-                    "og_description": metadata.og_description,
-                    "text_content": page_content.text_content,
-                    "main_content": page_content.main_content,
+                    "title": title,
+                    "folder_path": folder_path,
+                    "content": content,
+                    "content_length": content.len(),
                 });
 
-                Ok(CallToolResult::success(vec![Content::text(
-                    serde_json::to_string_pretty(&content)
-                        .unwrap_or_else(|e| format!("Error serializing content: {e}")),
-                )]))
+                let content_json = serde_json::to_string_pretty(&response)
+                    .unwrap_or_else(|e| format!("Error serializing response: {e}"));
+                Ok(CallToolResult::success(vec![Content::text(content_json)]))
+            }
+            Ok(None) => {
+                // コンテンツが取得できなかった場合
+                Ok(CallToolResult::error(vec![Content::text(format!(
+                    "Failed to fetch content for URL: {}. The page may be unavailable or require authentication.",
+                    req.url
+                ))]))
             }
             Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
-                "Error fetching content: {e}"
+                "Error fetching content for URL {}: {}",
+                req.url, e
             ))])),
         }
     }

@@ -31,6 +31,22 @@ fn parse_args() -> Result<Config> {
                 print_help();
                 std::process::exit(0);
             }
+            "--list-indexes" => {
+                list_indexes();
+                std::process::exit(0);
+            }
+            "--clear-index" => {
+                if i + 1 < args.len() {
+                    clear_index(Some(&args[i + 1]));
+                } else {
+                    clear_index(None);
+                }
+                std::process::exit(0);
+            }
+            "--clear-all-indexes" => {
+                clear_all_indexes();
+                std::process::exit(0);
+            }
             "--profile" if i + 1 < args.len() => {
                 config.profile_name = Some(args[i + 1].clone());
                 i += 2;
@@ -91,10 +107,139 @@ fn print_help() {
     println!("Advanced options:");
     println!("  --profile <name>     Chrome profile name (e.g., 'Work' or 'Profile 1')");
     println!("  --folder <name>      Target folder name (language independent)");
-    println!("  --exclude <folders>  Exclude specified folders");
-    println!("\nEnvironment variables:");
+    println!("  --exclude <folders>  Exclude specified folders\n");
+    println!("Index management:");
+    println!("  --list-indexes       List all available indexes");
+    println!("  --clear-index [key]  Clear specific index (or current if no key)");
+    println!("  --clear-all-indexes  Clear all indexes\n");
+    println!("Environment variables:");
     println!("  CHROME_PROFILE_NAME  Chrome profile name");
     println!("  CHROME_TARGET_FOLDER Target folder name");
+}
+
+/// List all available indexes
+fn list_indexes() {
+    let base_dir = dirs::data_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("mcp-bookmark");
+
+    println!("Available indexes:");
+    println!("==================\n");
+
+    if !base_dir.exists() {
+        println!("No indexes found.");
+        return;
+    }
+
+    let mut found = false;
+    if let Ok(entries) = std::fs::read_dir(&base_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() && path.file_name().unwrap() != "logs" {
+                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                    found = true;
+                    print!("  {}", name);
+
+                    // Read metadata if exists
+                    let meta_path = path.join("meta.json");
+                    if let Ok(content) = std::fs::read_to_string(meta_path) {
+                        if let Ok(meta) = serde_json::from_str::<serde_json::Value>(&content) {
+                            if let Some(count) = meta["bookmark_count"].as_u64() {
+                                print!(" ({} bookmarks", count);
+                            }
+                            if let Some(updated) = meta["last_updated"].as_str() {
+                                print!(", updated: {}", updated);
+                            }
+                            print!(")");
+                        }
+                    }
+
+                    // Show size
+                    if let Ok(size) = get_dir_size(&path) {
+                        let size_mb = size as f64 / 1024.0 / 1024.0;
+                        print!(" [{:.1}MB]", size_mb);
+                    }
+
+                    println!();
+                }
+            }
+        }
+    }
+
+    if !found {
+        println!("No indexes found.");
+    }
+}
+
+/// Clear specific index
+fn clear_index(key: Option<&str>) {
+    let base_dir = dirs::data_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("mcp-bookmark");
+
+    let index_dir = if let Some(k) = key {
+        base_dir.join(k)
+    } else {
+        // Use current config to determine index
+        let config = parse_args().unwrap_or_default();
+        let key = search::SearchManager::get_index_key(&config);
+        base_dir.join(key)
+    };
+
+    if !index_dir.exists() {
+        println!("Index not found: {:?}", index_dir);
+        return;
+    }
+
+    match std::fs::remove_dir_all(&index_dir) {
+        Ok(_) => println!("Index cleared: {:?}", index_dir),
+        Err(e) => println!("Failed to clear index: {}", e),
+    }
+}
+
+/// Clear all indexes
+fn clear_all_indexes() {
+    let base_dir = dirs::data_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("mcp-bookmark");
+
+    if !base_dir.exists() {
+        println!("No indexes found.");
+        return;
+    }
+
+    let mut cleared = 0;
+    if let Ok(entries) = std::fs::read_dir(&base_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() && path.file_name().unwrap() != "logs" {
+                if let Err(e) = std::fs::remove_dir_all(&path) {
+                    println!("Failed to clear {:?}: {}", path, e);
+                } else {
+                    cleared += 1;
+                }
+            }
+        }
+    }
+
+    println!("Cleared {} indexes.", cleared);
+}
+
+/// Get directory size recursively
+fn get_dir_size(path: &std::path::Path) -> Result<u64> {
+    let mut size = 0;
+    if path.is_dir() {
+        for entry in std::fs::read_dir(path)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_dir() {
+                size += get_dir_size(&path)?;
+            } else {
+                size += entry.metadata()?.len();
+            }
+        }
+    }
+    Ok(size)
 }
 
 /// Parse folder argument into folder paths
@@ -197,7 +342,7 @@ async fn main() -> Result<()> {
     tracing::info!("サーバー準備完了");
     tracing::debug!("{}", search_manager.get_indexing_status());
 
-    let server = BookmarkServer::new(reader, fetcher, search_manager);
+    let server = BookmarkServer::new(reader, search_manager);
 
     // Serve the MCP server
     let service = server.serve(stdio()).await?;

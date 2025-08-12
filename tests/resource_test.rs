@@ -19,7 +19,7 @@ async fn test_basic_server_creation() {
             .await
             .expect("Failed to create search manager"),
     );
-    let _server = BookmarkServer::new(reader.clone(), fetcher, search_manager);
+    let _server = BookmarkServer::new(reader.clone(), search_manager);
 
     println!("✅ Server created successfully");
 }

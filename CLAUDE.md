@@ -16,6 +16,11 @@ cargo build --release
 cargo run --release
 cargo run --release -- Development 10  # フォルダ指定
 
+# Index Management
+./target/release/mcp-bookmark --list-indexes      # インデックス一覧
+./target/release/mcp-bookmark --clear-index       # 現在設定のインデックスをクリア
+./target/release/mcp-bookmark --clear-all-indexes # 全インデックスをクリア
+
 # Lint and Format
 cargo fmt
 cargo clippy
@@ -32,5 +37,12 @@ cargo clippy
 
 - Auto-detect Chrome profile (largest bookmarks file)
 - Folder filtering to reduce context
+- Independent indexes per profile/folder combination (`Default_Development`, `Work_Tech_React`, etc.)
 - Simple command-line interface
 - macOS only (Chrome bookmarks at `~/Library/Application Support/Google/Chrome/*/Bookmarks`)
+
+## Index Management
+
+Indexes are stored at `~/Library/Application Support/mcp-bookmark/{profile}_{folder}/`
+- Same profile/folder settings share the same index across projects
+- Different settings use completely separate indexes

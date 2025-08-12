@@ -31,7 +31,7 @@ async fn test_server_creation() {
         }
     };
 
-    let server = BookmarkServer::new(reader, fetcher, search_manager);
+    let server = BookmarkServer::new(reader, search_manager);
 
     // Test that the server implements ServerHandler
     let info = server.get_info();
@@ -63,7 +63,7 @@ async fn test_server_info() {
         }
     };
 
-    let server = BookmarkServer::new(reader, fetcher, search_manager);
+    let server = BookmarkServer::new(reader, search_manager);
     let info = server.get_info();
 
     // Check capabilities

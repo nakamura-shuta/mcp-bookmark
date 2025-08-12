@@ -10,3 +10,5 @@ mcp-bookmark.exe
 
 # MCPの設定ファイル
 .mcp.json
+
+/.vscode

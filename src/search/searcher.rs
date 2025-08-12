@@ -54,18 +54,19 @@ impl BookmarkSearcher {
         // Create query parser for text fields
         let query_parser = QueryParser::for_index(&self.index, self.schema.text_fields());
 
-        let query = query_parser
+        let parsed_query = query_parser
             .parse_query(query)
             .context("Failed to parse search query")?;
 
         let top_docs = searcher
-            .search(&query, &TopDocs::with_limit(limit))
+            .search(&parsed_query, &TopDocs::with_limit(limit))
             .context("Search failed")?;
 
         let mut results = Vec::new();
         for (score, doc_address) in top_docs {
             let doc = searcher.doc(doc_address)?;
-            results.push(self.doc_to_result(&doc, score)?);
+            // snippetを含む結果を生成
+            results.push(self.doc_to_result_with_snippet(&doc, score, query)?);
         }
 
         Ok(results)
@@ -78,18 +79,18 @@ impl BookmarkSearcher {
         // Create query parser for content field only
         let query_parser = QueryParser::for_index(&self.index, vec![self.schema.content]);
 
-        let query = query_parser
+        let parsed_query = query_parser
             .parse_query(query)
             .context("Failed to parse content search query")?;
 
         let top_docs = searcher
-            .search(&query, &TopDocs::with_limit(limit))
+            .search(&parsed_query, &TopDocs::with_limit(limit))
             .context("Content search failed")?;
 
         let mut results = Vec::new();
         for (score, doc_address) in top_docs {
             let doc = searcher.doc(doc_address)?;
-            let mut result = self.doc_to_result(&doc, score)?;
+            let mut result = self.doc_to_result_with_snippet(&doc, score, query)?;
             // Boost score for content-only search to differentiate it
             result.score = score * 1.5;
             results.push(result);
@@ -144,9 +145,10 @@ impl BookmarkSearcher {
         let top_docs = searcher.search(&query, &TopDocs::with_limit(params.limit))?;
 
         let mut results = Vec::new();
+        let query_str = params.query.as_deref().unwrap_or("");
         for (score, doc_address) in top_docs {
             let doc = searcher.doc(doc_address)?;
-            results.push(self.doc_to_result(&doc, score)?);
+            results.push(self.doc_to_result_with_snippet(&doc, score, query_str)?);
         }
 
         Ok(results)
@@ -163,7 +165,33 @@ impl BookmarkSearcher {
 
         if let Some((score, doc_address)) = top_docs.into_iter().next() {
             let doc = searcher.doc(doc_address)?;
+            // IDで取得する場合はsnippetは不要（全文取得用）
             Ok(Some(self.doc_to_result(&doc, score)?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Get full content by URL from index
+    pub fn get_full_content_by_url(&self, url: &str) -> Result<Option<String>> {
+        let searcher = self.reader.searcher();
+
+        // URLフィールドで完全一致検索
+        let term = Term::from_field_text(self.schema.url, url);
+        let query = TermQuery::new(term, tantivy::schema::IndexRecordOption::Basic);
+
+        let top_docs = searcher.search(&query, &TopDocs::with_limit(1))?;
+
+        if let Some((_, doc_address)) = top_docs.into_iter().next() {
+            let doc: TantivyDocument = searcher.doc(doc_address)?;
+
+            // contentフィールドから全文を取得
+            let content = doc
+                .get_first(self.schema.content)
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
+            Ok(content)
         } else {
             Ok(None)
         }
@@ -197,6 +225,16 @@ impl BookmarkSearcher {
             .and_then(|v| v.as_i64())
             .unwrap_or(0);
 
+        // コンテンツフィールドを取得（存在するかチェック）
+        let content = doc
+            .get_first(self.schema.content)
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let has_full_content = content.is_some();
+        // snippetは後で検索クエリに基づいて生成される
+        let content_snippet = None;
+
         Ok(SearchResult {
             id,
             url,
@@ -206,7 +244,97 @@ impl BookmarkSearcher {
             score,
             date_added,
             date_modified,
+            content_snippet,
+            has_full_content,
         })
+    }
+
+    /// Convert document to search result with content snippet
+    fn doc_to_result_with_snippet(
+        &self,
+        doc: &TantivyDocument,
+        score: f32,
+        query: &str,
+    ) -> Result<SearchResult> {
+        let mut result = self.doc_to_result(doc, score)?;
+
+        // コンテンツからsnippetを生成
+        if let Some(content_value) = doc.get_first(self.schema.content) {
+            if let Some(content_text) = content_value.as_str() {
+                result.content_snippet = self.generate_snippet(content_text, query);
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// Generate content snippet around search terms
+    fn generate_snippet(&self, content: &str, query: &str) -> Option<String> {
+        if content.is_empty() {
+            return None;
+        }
+
+        // クエリを単語に分割（簡単な実装）
+        let query_terms: Vec<String> = query
+            .to_lowercase()
+            .split_whitespace()
+            .map(|s| s.to_string())
+            .collect();
+
+        if query_terms.is_empty() {
+            // クエリがない場合は最初の200文字を返す
+            let snippet = if content.len() > 200 {
+                format!("{}...", &content[..200])
+            } else {
+                content.to_string()
+            };
+            return Some(snippet);
+        }
+
+        let content_lower = content.to_lowercase();
+
+        // 最初にマッチする箇所を探す
+        for term in &query_terms {
+            if let Some(pos) = content_lower.find(term) {
+                // マッチ箇所の前後100文字を取得
+                let start = if pos > 100 { pos - 100 } else { 0 };
+                let end = std::cmp::min(pos + term.len() + 100, content.len());
+
+                // UTF-8境界を考慮した安全な切り出し
+                let mut start_byte = start;
+                while start_byte > 0 && !content.is_char_boundary(start_byte) {
+                    start_byte -= 1;
+                }
+
+                let mut end_byte = end;
+                while end_byte < content.len() && !content.is_char_boundary(end_byte) {
+                    end_byte += 1;
+                }
+
+                let snippet = &content[start_byte..end_byte];
+
+                // 前後に省略記号を追加
+                let formatted = if start_byte > 0 && end_byte < content.len() {
+                    format!("...{}...", snippet)
+                } else if start_byte > 0 {
+                    format!("...{}", snippet)
+                } else if end_byte < content.len() {
+                    format!("{}...", snippet)
+                } else {
+                    snippet.to_string()
+                };
+
+                return Some(formatted);
+            }
+        }
+
+        // マッチしない場合は最初の200文字
+        let snippet = if content.len() > 200 {
+            format!("{}...", &content[..200])
+        } else {
+            content.to_string()
+        };
+        Some(snippet)
     }
 
     /// Helper to extract text field
@@ -275,6 +403,8 @@ pub struct SearchResult {
     pub score: f32,
     pub date_added: i64,
     pub date_modified: i64,
+    pub content_snippet: Option<String>, // 検索ヒット箇所の抜粋
+    pub has_full_content: bool,          // インデックスにコンテンツがあるか
 }
 
 /// Index statistics
