@@ -2,15 +2,13 @@
 /target
 /.claude
 
-# ビルド済みバイナリ
+# Built binaries
 mcp-bookmark-darwin-*
 mcp-bookmark-linux-*
 mcp-bookmark-windows-*
 mcp-bookmark.exe
 
-# MCPの設定ファイル
+# MCP configuration file
 .mcp.json
 
 /.vscode
-
-/scripts

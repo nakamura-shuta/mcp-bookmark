@@ -13,22 +13,74 @@ MCP (Model Context Protocol) server providing access to Chrome bookmarks
 - **Folder Filtering**: Expose only specific folder bookmarks
 - **Independent Index Management**: Separate indexes per profile/folder combination
 
+## Quick Start (Easiest Way)
+
+For other projects, simply use the absolute path in your `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "mcp-bookmark": {
+      "command": "/path/to/mcp-bookmark/target/release/mcp-bookmark",
+      "env": {
+        "CHROME_TARGET_FOLDER": "Development"
+      }
+    }
+  }
+}
+```
+
+**No installation required!** Just build once and reference the binary path.
+
 ## Installation
 
-### macOS (Apple Silicon)
+### Option 1: Download Pre-built Binary
+
+#### macOS (Apple Silicon)
 
 ```bash
-curl -L https://github.com/your-org/mcp-bookmark/releases/latest/download/mcp-bookmark-darwin-arm64 -o mcp-bookmark
+curl -L https://github.com/USERNAME/mcp-bookmark/releases/latest/download/mcp-bookmark-darwin-arm64 -o mcp-bookmark
 chmod +x mcp-bookmark
 sudo mv mcp-bookmark /usr/local/bin/
 ```
 
-### macOS (Intel)
+#### macOS (Intel)
 
 ```bash
-curl -L https://github.com/your-org/mcp-bookmark/releases/latest/download/mcp-bookmark-darwin-x64 -o mcp-bookmark
+curl -L https://github.com/USERNAME/mcp-bookmark/releases/latest/download/mcp-bookmark-darwin-x64 -o mcp-bookmark
 chmod +x mcp-bookmark
 sudo mv mcp-bookmark /usr/local/bin/
+```
+
+### Option 2: Build from Source
+
+```bash
+# Clone the repository
+git clone https://github.com/USERNAME/mcp-bookmark.git
+cd mcp-bookmark
+
+# Build the release binary
+cargo build --release
+
+# Install globally
+sudo cp target/release/mcp-bookmark /usr/local/bin/
+
+# Or create a symbolic link (alternative)
+sudo ln -s $(pwd)/target/release/mcp-bookmark /usr/local/bin/mcp-bookmark
+
+# Or add to PATH (another alternative)
+echo 'export PATH="'$(pwd)'/target/release:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+### Verify Installation
+
+```bash
+# Check if mcp-bookmark is available
+which mcp-bookmark
+
+# Test the binary
+mcp-bookmark --help
 ```
 
 ## Configuration
@@ -66,6 +118,8 @@ Place `.mcp.json` in your project root directory to enable project-specific MCP 
 
 This allows different bookmark folders and settings per project.
 
+**Important**: Use `"command": "mcp-bookmark"` (not an absolute path) after global installation. This ensures the configuration works across different machines and projects.
+
 ### Expose Specific Folder Only
 
 ```json
@@ -100,16 +154,27 @@ This feature allows exposing only specific nested subfolders.
 
 ### Profile Specification
 
+You can specify which Chrome profile to use by setting the `CHROME_PROFILE_NAME` environment variable. The profile name should be the display name shown in Chrome, not the internal directory name.
+
 ```json
 {
   "mcpServers": {
     "mcp-bookmark": {
       "command": "mcp-bookmark",
-      "args": ["--profile", "Work"]
+      "env": {
+        "CHROME_PROFILE_NAME": "Work"  // Use display name, not directory name like "Default"
+      }
     }
   }
 }
 ```
+
+To check available profiles, use the MCP tool or run:
+```bash
+mcp-bookmark --list-profiles
+```
+
+**Note**: If `CHROME_PROFILE_NAME` is not specified, the server will auto-detect and use the profile with the largest bookmarks file.
 
 ## Usage
 
@@ -179,7 +244,42 @@ mcp-bookmark --clear-index Default_Development
 mcp-bookmark --clear-all-indexes
 ```
 
+## Using in Other Projects
+
+After global installation, create a `.mcp.json` file in your project root:
+
+```json
+{
+  "mcpServers": {
+    "mcp-bookmark": {
+      "command": "mcp-bookmark",
+      "env": {
+        "RUST_LOG": "info",
+        "CHROME_PROFILE_NAME": "Work",  // Use display name (e.g., "Work", "Personal")
+        "CHROME_TARGET_FOLDER": "YourProjectFolder"
+      }
+    }
+  }
+}
+```
+
+**Note**: 
+- `CHROME_PROFILE_NAME` should be the display name shown in Chrome (e.g., "Work", "Personal"), not the internal directory name (e.g., "Default", "Profile 1")
+- Adjust `CHROME_TARGET_FOLDER` to match your project's bookmark folder
+- If `CHROME_PROFILE_NAME` is omitted, the server will auto-detect the profile with the largest bookmarks file
+
 ## Troubleshooting
+
+### Common Issues
+
+#### "Connection failed: MCP error -32000"
+
+This error typically means `mcp-bookmark` is not installed globally or not in PATH.
+
+**Solution**:
+1. Install mcp-bookmark globally using one of the installation methods above
+2. Verify installation with `which mcp-bookmark`
+3. Ensure your `.mcp.json` uses `"command": "mcp-bookmark"` (not an absolute path)
 
 ### Check Chrome Profiles
 

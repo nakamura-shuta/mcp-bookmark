@@ -98,9 +98,9 @@ impl BookmarkServer {
         &self,
         Parameters(req): Parameters<FullTextSearchRequest>,
     ) -> Result<CallToolResult, McpError> {
-        // 検索パラメータ構築
+        // Build search parameters
         let results = if req.folder.is_some() || req.domain.is_some() {
-            // フィルター付き検索
+            // Search with filters
             let mut params = SearchParams::new(&req.query);
             if let Some(folder) = req.folder {
                 params = params.with_folder(folder);
@@ -113,7 +113,7 @@ impl BookmarkServer {
             }
             self.search_manager.search_advanced(&params).await
         } else {
-            // 通常検索
+            // Normal search
             self.search_manager
                 .search(&req.query, req.limit.unwrap_or(20))
                 .await
@@ -121,7 +121,7 @@ impl BookmarkServer {
 
         match results {
             Ok(results) => {
-                // インデックス状況を含める
+                // Include indexing status
                 let status = self.search_manager.get_indexing_status();
                 let is_complete = self.search_manager.is_indexing_complete();
 
@@ -170,7 +170,7 @@ impl BookmarkServer {
             Ok(resolver) => {
                 match resolver.list_all_profiles() {
                     Ok(profiles) => {
-                        // 現在のプロファイルを取得
+                        // Get current profile
                         let current_profile = resolver.get_current_profile();
                         let current_dir = current_profile.as_ref().map(|p| &p.directory_name);
 
@@ -213,10 +213,10 @@ impl BookmarkServer {
         &self,
         Parameters(req): Parameters<GetBookmarkContentRequest>,
     ) -> Result<CallToolResult, McpError> {
-        // URLからコンテンツを取得（インデックスまたは新規フェッチ）
+        // Get content from URL (from index or new fetch)
         match self.search_manager.get_content_by_url(&req.url).await {
             Ok(Some(content)) => {
-                // ブックマーク情報も取得
+                // Also get bookmark information
                 let search_results = self
                     .search_manager
                     .search(&req.url, 1)
@@ -246,7 +246,7 @@ impl BookmarkServer {
                 Ok(CallToolResult::success(vec![Content::text(content_json)]))
             }
             Ok(None) => {
-                // コンテンツが取得できなかった場合
+                // If content could not be fetched
                 Ok(CallToolResult::error(vec![Content::text(format!(
                     "Failed to fetch content for URL: {}. The page may be unavailable or require authentication.",
                     req.url

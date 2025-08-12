@@ -107,14 +107,14 @@ impl BookmarkNode {
         None
     }
 
-    /// フォルダ名で検索（言語非依存）
+    /// Search by folder name (language independent)
     pub fn find_folder_by_name(&self, folder_name: &str) -> Option<&BookmarkNode> {
-        // 自分自身がマッチする場合
+        // If this folder matches
         if self.is_folder() && self.name == folder_name {
             return Some(self);
         }
 
-        // 子要素を再帰的に検索
+        // Recursively search children
         if let Some(children) = &self.children {
             for child in children {
                 if let Some(found) = child.find_folder_by_name(folder_name) {
@@ -162,7 +162,7 @@ pub struct BookmarkReader {
 
 impl BookmarkReader {
     pub fn with_config(config: Config) -> Result<Self> {
-        // プロファイル名指定がある場合は優先的に使用
+        // Use profile name if specified
         let bookmarks_path = if let Some(profile_name) = &config.profile_name {
             let resolver = crate::chrome_profile::ProfileResolver::new()?;
             let profile = resolver.resolve_by_name(profile_name)?;
@@ -191,9 +191,9 @@ impl BookmarkReader {
         }
     }
 
-    /// ブックマークファイルを探す（環境変数またはデフォルト）
+    /// Find bookmarks file (from environment variable or default)
     fn find_bookmarks_path() -> Result<PathBuf> {
-        // 環境変数でプロファイルを指定可能
+        // Profile can be specified via environment variable
         if let Ok(profile) = std::env::var("CHROME_PROFILE") {
             let home = dirs::home_dir().context("Failed to get home directory")?;
             let path = home.join(format!(
@@ -210,7 +210,7 @@ impl BookmarkReader {
             }
         }
 
-        // 環境変数でプロファイル名を指定可能
+        // Profile name can be specified via environment variable
         if let Ok(profile_name) = std::env::var("CHROME_PROFILE_NAME") {
             if let Ok(resolver) = crate::chrome_profile::ProfileResolver::new() {
                 if let Ok(profile) = resolver.resolve_by_name(&profile_name) {
@@ -227,13 +227,13 @@ impl BookmarkReader {
             }
         }
 
-        // 自動検出: 最もサイズが大きいブックマークファイルを選択
+        // Auto-detect: select the bookmark file with the largest size
         let home = dirs::home_dir().context("Failed to get home directory")?;
         let chrome_dir = home.join("Library/Application Support/Google/Chrome");
 
         let mut candidates = Vec::new();
 
-        // 各プロファイルをチェック
+        // Check each profile
         for profile in &["Default", "Profile 1", "Profile 2", "Profile 3"] {
             let path = chrome_dir.join(profile).join("Bookmarks");
             if path.exists() {
@@ -243,7 +243,7 @@ impl BookmarkReader {
             }
         }
 
-        // サイズが最大のものを選択（メインで使用している可能性が高い）
+        // Select the one with maximum size (likely the main one in use)
         candidates.sort_by_key(|&(_, size, _)| std::cmp::Reverse(size));
 
         if let Some((path, size, profile)) = candidates.first() {
@@ -254,7 +254,7 @@ impl BookmarkReader {
             );
             Ok(path.clone())
         } else {
-            // フォールバック: Defaultを使用
+            // Fallback: use Default
             let default_path = chrome_dir.join("Default/Bookmarks");
             if default_path.exists() {
                 Ok(default_path)
@@ -323,7 +323,7 @@ impl BookmarkReader {
     }
 
     pub fn get_all_bookmarks(&self) -> Result<Vec<FlatBookmark>> {
-        // target_folderが指定されている場合は特定フォルダのみ取得
+        // If target_folder is specified, get only that specific folder
         if let Some(target_folder) = &self.config.target_folder {
             tracing::info!("Fetching bookmarks from target folder: {}", target_folder);
             let result = self.get_folder_bookmarks_by_name(target_folder)?;
@@ -460,12 +460,12 @@ impl BookmarkReader {
         Ok(folders)
     }
 
-    /// フォルダ名で検索してブックマークを取得（言語非依存）
-    /// スラッシュ区切りでサブフォルダを指定可能（例: "Development/React"）
+    /// Get bookmarks by searching folder name (language independent)
+    /// Can specify subfolders with slash separation (e.g., "Development/React")
     pub fn get_folder_bookmarks_by_name(&self, folder_name: &str) -> Result<Vec<FlatBookmark>> {
         let bookmarks = self.read()?;
 
-        // スラッシュ区切りの場合はパスとして処理
+        // Process as path if slash-separated
         if folder_name.contains('/') {
             let path: Vec<String> = folder_name
                 .split('/')
@@ -475,21 +475,21 @@ impl BookmarkReader {
             tracing::info!("Parsing folder path '{}' as: {:?}", folder_name, path);
             tracing::debug!("Searching for folder path: {:?}", path);
 
-            // 各ルートノードから検索
+            // Search from each root node
             let folders = vec![
                 bookmarks.roots.bookmark_bar.find_folder(&path),
                 bookmarks.roots.other.find_folder(&path),
                 bookmarks.roots.synced.find_folder(&path),
             ];
 
-            // 最初に見つかったフォルダのブックマークを返す
+            // Return bookmarks from the first found folder
             if let Some(folder) = folders.into_iter().flatten().next() {
                 tracing::debug!("Found folder '{}' in bookmarks", folder_name);
                 let results = folder.flatten();
                 return Ok(self.apply_max_limit(results));
             }
         } else {
-            // 単一のフォルダ名として検索（既存の処理）
+            // Search as single folder name (existing process)
             let folders = vec![
                 bookmarks
                     .roots
@@ -499,7 +499,7 @@ impl BookmarkReader {
                 bookmarks.roots.synced.find_folder_by_name(folder_name),
             ];
 
-            // 最初に見つかったフォルダのブックマークを返す
+            // Return bookmarks from the first found folder
             if let Some(folder) = folders.into_iter().flatten().next() {
                 tracing::debug!("Found folder '{}' in bookmarks", folder_name);
                 let results = folder.flatten();

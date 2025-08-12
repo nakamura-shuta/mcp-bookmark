@@ -75,7 +75,7 @@ fn parse_args() -> Result<Config> {
         i += 1;
     }
 
-    // 環境変数からも読み込み
+    // Also read from environment variables
     if config.profile_name.is_none() {
         config.profile_name = env::var("CHROME_PROFILE_NAME").ok();
     }
@@ -334,12 +334,12 @@ async fn main() -> Result<()> {
     let reader = Arc::new(BookmarkReader::with_config(config.clone())?);
     let fetcher = Arc::new(ContentFetcher::new()?);
 
-    // 検索マネージャーを初期化
-    tracing::debug!("検索インデックスを初期化中...");
+    // Initialize search manager
+    tracing::debug!("Initializing search index...");
     let search_manager = ContentIndexManager::new(reader.clone(), fetcher.clone()).await?;
     let search_manager = Arc::new(search_manager);
 
-    tracing::info!("サーバー準備完了");
+    tracing::info!("Server ready");
     tracing::debug!("{}", search_manager.get_indexing_status());
 
     let server = BookmarkServer::new(reader, search_manager);

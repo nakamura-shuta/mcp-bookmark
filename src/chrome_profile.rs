@@ -5,7 +5,7 @@ use std::fs;
 use std::path::PathBuf;
 use tracing::info;
 
-/// Chrome Local State ファイルの構造（必要な部分のみ）
+/// Chrome Local State file structure (only necessary parts)
 #[derive(Debug, Deserialize)]
 struct LocalState {
     profile: ProfileInfo,
@@ -16,7 +16,7 @@ struct ProfileInfo {
     info_cache: Value,
 }
 
-/// プロファイル情報
+/// Profile information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChromeProfile {
     pub directory_name: String, // "Default", "Profile 1", etc.
@@ -26,13 +26,13 @@ pub struct ChromeProfile {
     pub size_kb: Option<u64>,          // Size of bookmarks file in KB
 }
 
-/// Chromeプロファイルを管理する構造体
+/// Structure to manage Chrome profiles
 pub struct ProfileResolver {
     chrome_base_dir: PathBuf,
 }
 
 impl ProfileResolver {
-    /// 新規作成
+    /// Create new
     pub fn new() -> Result<Self> {
         let home = dirs::home_dir().context("Failed to get home directory")?;
         let chrome_base_dir = home.join("Library/Application Support/Google/Chrome");
@@ -44,7 +44,7 @@ impl ProfileResolver {
         Ok(Self { chrome_base_dir })
     }
 
-    /// Local State ファイルを読み込む
+    /// Read Local State file
     fn read_local_state(&self) -> Result<LocalState> {
         let local_state_path = self.chrome_base_dir.join("Local State");
 
@@ -61,14 +61,14 @@ impl ProfileResolver {
         Ok(state)
     }
 
-    /// プロファイル名からディレクトリを解決
+    /// Resolve directory from profile name
     pub fn resolve_by_name(&self, profile_name: &str) -> Result<ChromeProfile> {
         let state = self.read_local_state()?;
 
-        // info_cache から全プロファイルを検索
+        // Search all profiles from info_cache
         if let Some(info_cache) = state.profile.info_cache.as_object() {
             for (dir_name, profile_info) in info_cache {
-                // nameフィールドをチェック
+                // Check name field
                 if let Some(name) = profile_info.get("name").and_then(|n| n.as_str()) {
                     if name == profile_name {
                         let profile_path = self.chrome_base_dir.join(dir_name);
@@ -88,7 +88,7 @@ impl ProfileResolver {
                     }
                 }
 
-                // gaia_nameもチェック（Googleアカウント名の場合）
+                // Also check gaia_name (for Google account names)
                 if let Some(gaia_name) = profile_info.get("gaia_name").and_then(|n| n.as_str()) {
                     if gaia_name == profile_name {
                         let profile_path = self.chrome_base_dir.join(dir_name);
@@ -113,23 +113,23 @@ impl ProfileResolver {
         anyhow::bail!("Profile '{}' not found", profile_name)
     }
 
-    /// プロファイルディレクトリからBookmarksファイルパスを取得
+    /// Get Bookmarks file path from profile directory
     pub fn get_bookmarks_path(&self, profile: &ChromeProfile) -> PathBuf {
         profile.path.join("Bookmarks")
     }
 
-    /// 利用可能な全てのプロファイルを取得
+    /// Get all available profiles
     pub fn list_all_profiles(&self) -> Result<Vec<ChromeProfile>> {
         let mut profiles = Vec::new();
         let state = self.read_local_state()?;
 
-        // info_cache から全プロファイルを取得
+        // Get all profiles from info_cache
         if let Some(info_cache) = state.profile.info_cache.as_object() {
             for (dir_name, profile_info) in info_cache {
                 let profile_path = self.chrome_base_dir.join(dir_name);
                 let bookmarks_path = profile_path.join("Bookmarks");
 
-                // ブックマークファイルのサイズと件数を取得
+                // Get bookmark file size and count
                 let (size_kb, bookmark_count) = if bookmarks_path.exists() {
                     let size = fs::metadata(&bookmarks_path).map(|m| m.len() / 1024).ok();
 
@@ -139,7 +139,7 @@ impl ProfileResolver {
                     (None, None)
                 };
 
-                // 表示名を取得（nameまたはgaia_name）
+                // Get display name (name or gaia_name)
                 let display_name = profile_info
                     .get("name")
                     .and_then(|n| n.as_str())
@@ -157,7 +157,7 @@ impl ProfileResolver {
             }
         }
 
-        // Defaultプロファイルが含まれていない場合は追加
+        // Add Default profile if not included
         if !profiles.iter().any(|p| p.directory_name == "Default") {
             let default_path = self.chrome_base_dir.join("Default");
             if default_path.exists() {
@@ -180,13 +180,13 @@ impl ProfileResolver {
             }
         }
 
-        // サイズ順でソート（大きい順）
+        // Sort by size (descending)
         profiles.sort_by_key(|p| std::cmp::Reverse(p.size_kb.unwrap_or(0)));
 
         Ok(profiles)
     }
 
-    /// ブックマークファイルから件数を数える
+    /// Count bookmarks from file
     fn count_bookmarks(bookmarks_path: &PathBuf) -> Option<usize> {
         if let Ok(content) = fs::read_to_string(bookmarks_path) {
             if let Ok(json) = serde_json::from_str::<Value>(&content) {
@@ -196,26 +196,26 @@ impl ProfileResolver {
         None
     }
 
-    /// JSONから再帰的にブックマークをカウント
+    /// Recursively count bookmarks from JSON
     fn count_bookmarks_recursive(value: &Value) -> usize {
         let mut count = 0;
 
         if let Some(obj) = value.as_object() {
-            // URLタイプのノードをカウント
+            // Count URL type nodes
             if let Some(node_type) = obj.get("type").and_then(|t| t.as_str()) {
                 if node_type == "url" {
                     count += 1;
                 }
             }
 
-            // 子要素を再帰的に探索
+            // Recursively explore children
             if let Some(children) = obj.get("children").and_then(|c| c.as_array()) {
                 for child in children {
                     count += Self::count_bookmarks_recursive(child);
                 }
             }
 
-            // ルートノードの場合
+            // For root node
             if let Some(roots) = obj.get("roots").and_then(|r| r.as_object()) {
                 for (_, root) in roots {
                     count += Self::count_bookmarks_recursive(root);
@@ -226,9 +226,9 @@ impl ProfileResolver {
         count
     }
 
-    /// 現在アクティブなプロファイルを推測
+    /// Guess currently active profile
     pub fn get_current_profile(&self) -> Option<ChromeProfile> {
-        // 最もサイズが大きいブックマークファイルを持つプロファイルを返す
+        // Return profile with largest bookmark file
         self.list_all_profiles()
             .ok()
             .and_then(|profiles| profiles.into_iter().next())
@@ -241,7 +241,7 @@ mod tests {
 
     #[test]
     fn test_profile_resolver_creation() {
-        // プロファイルリゾルバーの作成
+        // Create profile resolver
         let resolver = ProfileResolver::new();
         assert!(resolver.is_ok() || resolver.is_err()); // 環境依存
     }

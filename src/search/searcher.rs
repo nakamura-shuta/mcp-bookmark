@@ -65,7 +65,7 @@ impl BookmarkSearcher {
         let mut results = Vec::new();
         for (score, doc_address) in top_docs {
             let doc = searcher.doc(doc_address)?;
-            // snippetを含む結果を生成
+            // Generate results with snippets
             results.push(self.doc_to_result_with_snippet(&doc, score, query)?);
         }
 
@@ -165,7 +165,7 @@ impl BookmarkSearcher {
 
         if let Some((score, doc_address)) = top_docs.into_iter().next() {
             let doc = searcher.doc(doc_address)?;
-            // IDで取得する場合はsnippetは不要（全文取得用）
+            // No snippet needed when getting by ID (for full text retrieval)
             Ok(Some(self.doc_to_result(&doc, score)?))
         } else {
             Ok(None)
@@ -176,7 +176,7 @@ impl BookmarkSearcher {
     pub fn get_full_content_by_url(&self, url: &str) -> Result<Option<String>> {
         let searcher = self.reader.searcher();
 
-        // URLフィールドで完全一致検索
+        // Exact match search on URL field
         let term = Term::from_field_text(self.schema.url, url);
         let query = TermQuery::new(term, tantivy::schema::IndexRecordOption::Basic);
 
@@ -185,7 +185,7 @@ impl BookmarkSearcher {
         if let Some((_, doc_address)) = top_docs.into_iter().next() {
             let doc: TantivyDocument = searcher.doc(doc_address)?;
 
-            // contentフィールドから全文を取得
+            // Get full text from content field
             let content = doc
                 .get_first(self.schema.content)
                 .and_then(|v| v.as_str())
@@ -225,14 +225,14 @@ impl BookmarkSearcher {
             .and_then(|v| v.as_i64())
             .unwrap_or(0);
 
-        // コンテンツフィールドを取得（存在するかチェック）
+        // Get content field (check if exists)
         let content = doc
             .get_first(self.schema.content)
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
         let has_full_content = content.is_some();
-        // snippetは後で検索クエリに基づいて生成される
+        // Snippet will be generated later based on search query
         let content_snippet = None;
 
         Ok(SearchResult {
@@ -258,7 +258,7 @@ impl BookmarkSearcher {
     ) -> Result<SearchResult> {
         let mut result = self.doc_to_result(doc, score)?;
 
-        // コンテンツからsnippetを生成
+        // Generate snippet from content
         if let Some(content_value) = doc.get_first(self.schema.content) {
             if let Some(content_text) = content_value.as_str() {
                 result.content_snippet = self.generate_snippet(content_text, query);
@@ -274,7 +274,7 @@ impl BookmarkSearcher {
             return None;
         }
 
-        // クエリを単語に分割（簡単な実装）
+        // Split query into words (simple implementation)
         let query_terms: Vec<String> = query
             .to_lowercase()
             .split_whitespace()
@@ -282,7 +282,7 @@ impl BookmarkSearcher {
             .collect();
 
         if query_terms.is_empty() {
-            // クエリがない場合は最初の200文字を返す
+            // Return first 200 characters if no query
             let snippet = if content.len() > 200 {
                 format!("{}...", &content[..200])
             } else {
@@ -293,14 +293,14 @@ impl BookmarkSearcher {
 
         let content_lower = content.to_lowercase();
 
-        // 最初にマッチする箇所を探す
+        // Find first matching position
         for term in &query_terms {
             if let Some(pos) = content_lower.find(term) {
-                // マッチ箇所の前後100文字を取得
-                let start = if pos > 100 { pos - 100 } else { 0 };
+                // Get 100 characters before and after match
+                let start = pos.saturating_sub(100);
                 let end = std::cmp::min(pos + term.len() + 100, content.len());
 
-                // UTF-8境界を考慮した安全な切り出し
+                // Safe extraction considering UTF-8 boundaries
                 let mut start_byte = start;
                 while start_byte > 0 && !content.is_char_boundary(start_byte) {
                     start_byte -= 1;
@@ -313,13 +313,13 @@ impl BookmarkSearcher {
 
                 let snippet = &content[start_byte..end_byte];
 
-                // 前後に省略記号を追加
+                // Add ellipsis before and after
                 let formatted = if start_byte > 0 && end_byte < content.len() {
-                    format!("...{}...", snippet)
+                    format!("...{snippet}...")
                 } else if start_byte > 0 {
-                    format!("...{}", snippet)
+                    format!("...{snippet}")
                 } else if end_byte < content.len() {
-                    format!("{}...", snippet)
+                    format!("{snippet}...")
                 } else {
                     snippet.to_string()
                 };
@@ -328,7 +328,7 @@ impl BookmarkSearcher {
             }
         }
 
-        // マッチしない場合は最初の200文字
+        // First 200 characters if no match
         let snippet = if content.len() > 200 {
             format!("{}...", &content[..200])
         } else {
@@ -403,8 +403,8 @@ pub struct SearchResult {
     pub score: f32,
     pub date_added: i64,
     pub date_modified: i64,
-    pub content_snippet: Option<String>, // 検索ヒット箇所の抜粋
-    pub has_full_content: bool,          // インデックスにコンテンツがあるか
+    pub content_snippet: Option<String>, // Excerpt from search hit
+    pub has_full_content: bool,          // Whether content exists in index
 }
 
 /// Index statistics

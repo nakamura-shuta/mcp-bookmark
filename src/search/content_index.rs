@@ -9,36 +9,36 @@ use super::{SearchManager, SearchParams, SearchResult};
 use crate::bookmark::{BookmarkReader, FlatBookmark};
 use crate::content::ContentFetcher;
 
-/// コンテンツインデックス管理
-/// バックグラウンドでコンテンツを段階的にインデックス化し、検索機能を提供
+/// Content index management
+/// Progressively index content in background and provide search functionality
 #[derive(Debug, Clone)]
 pub struct ContentIndexManager {
-    /// tantivy検索エンジン
+    /// Tantivy search engine
     tantivy_search: Arc<Mutex<SearchManager>>,
 
-    /// コンテンツ取得用
+    /// For content fetching
     content_fetcher: Arc<ContentFetcher>,
 
-    /// インデックス構築状況
+    /// Index building status
     indexing_status: Arc<IndexingStatus>,
 }
 
-/// インデックス構築状況
+/// Index building status
 #[derive(Debug)]
 pub struct IndexingStatus {
-    /// 総ブックマーク数
+    /// Total bookmark count
     pub total: AtomicUsize,
 
-    /// 完了数
+    /// Completed count
     pub completed: AtomicUsize,
 
-    /// エラー数
+    /// Error count
     pub errors: AtomicUsize,
 
-    /// 完了フラグ
+    /// Completion flag
     pub is_complete: AtomicBool,
 
-    /// 開始時刻
+    /// Start time
     pub started_at: std::time::Instant,
 }
 
@@ -53,7 +53,7 @@ impl IndexingStatus {
         }
     }
 
-    /// 進捗率を取得（0.0 - 100.0）
+    /// Get progress percentage (0.0 - 100.0)
     pub fn progress_percentage(&self) -> f64 {
         let total = self.total.load(Ordering::Relaxed);
         if total == 0 {
@@ -63,7 +63,7 @@ impl IndexingStatus {
         (completed as f64 / total as f64) * 100.0
     }
 
-    /// ステータス文字列を生成
+    /// Generate status string
     pub fn status_string(&self) -> String {
         let total = self.total.load(Ordering::Relaxed);
         let completed = self.completed.load(Ordering::Relaxed);
@@ -72,7 +72,7 @@ impl IndexingStatus {
 
         if self.is_complete.load(Ordering::Relaxed) {
             format!(
-                "✅ インデックス構築完了: {}/{} 成功, {} エラー (所要時間: {:.1}秒)",
+                "✅ Index build complete: {}/{} success, {} errors (duration: {:.1}s)",
                 completed - errors,
                 total,
                 errors,
@@ -88,7 +88,7 @@ impl IndexingStatus {
             };
 
             format!(
-                "📥 インデックス構築中: {}/{} ({:.1}%), {} エラー, 推定残り時間: {:.0}秒",
+                "📥 Building index: {}/{} ({:.1} errors, estimated remaining: {}s{:.0}秒",
                 completed,
                 total,
                 self.progress_percentage(),
@@ -100,68 +100,68 @@ impl IndexingStatus {
 }
 
 impl ContentIndexManager {
-    /// 新規作成
+    /// Create new
     pub async fn new(reader: Arc<BookmarkReader>, fetcher: Arc<ContentFetcher>) -> Result<Self> {
-        // ブックマーク取得
+        // Get bookmarks
         let bookmarks = reader.get_all_bookmarks()?;
         let total = bookmarks.len();
 
-        debug!("検索マネージャーを初期化中 ({}件のブックマーク)", total);
+        debug!("Initializing search manager ({} bookmarks)", total);
 
-        // SearchManager作成 - 設定を使用
+        // Create SearchManager - using config
         let mut search_manager = SearchManager::new_with_config(&reader.config)?;
 
-        // メタデータのみを即座にインデックス
-        debug!("メタデータをインデックス化中...");
+        // Index only metadata immediately
+        debug!("Indexing metadata...");
         search_manager.build_index(&bookmarks)?;
 
-        // マネージャー作成
+        // Create manager
         let manager = Self {
             tantivy_search: Arc::new(Mutex::new(search_manager)),
             content_fetcher: fetcher,
             indexing_status: Arc::new(IndexingStatus::new(total)),
         };
 
-        // バックグラウンドでコンテンツ取得開始
+        // Start fetching content in background
         manager.start_background_indexing(bookmarks).await;
 
         Ok(manager)
     }
 
-    /// バックグラウンドでコンテンツをインデックス化
+    /// Index content in background
     async fn start_background_indexing(&self, bookmarks: Vec<FlatBookmark>) {
         let search_manager = self.tantivy_search.clone();
         let fetcher = self.content_fetcher.clone();
         let status = self.indexing_status.clone();
 
         tokio::spawn(async move {
-            info!("バックグラウンドインデックス構築を開始");
+            info!("Starting background index building");
 
-            // 優先度でソート（重要なドメインを先に）
+            // Sort by priority (important domains first)
             let mut bookmarks = bookmarks;
             bookmarks.sort_by_key(|b| {
-                // URL からドメインを抽出
+                // Extract domain from URL
                 let domain = url::Url::parse(&b.url)
                     .ok()
                     .and_then(|u| u.host_str().map(|h| h.to_string()))
                     .unwrap_or_default();
 
                 match domain.as_str() {
-                    // ドキュメントサイトは最優先
+                    // Documentation sites have highest priority
                     "docs.rs" | "doc.rust-lang.org" => 0,
                     "react.dev" | "reactjs.org" => 1,
                     "developer.mozilla.org" => 2,
                     "docs.github.com" => 3,
                     "docs.aws.amazon.com" => 4,
-                    // 技術ブログ
+                    // Tech blogs
                     "medium.com" | "dev.to" => 10,
                     "stackoverflow.com" => 11,
-                    // その他
+                    // Others
                     _ => 100,
                 }
             });
 
-            // 並列度制限（10並列）
+            // Concurrency limit (10 parallel)
             let semaphore = Arc::new(Semaphore::new(10));
             let mut handles = vec![];
 
@@ -175,42 +175,42 @@ impl ContentIndexManager {
                 let handle = tokio::spawn(async move {
                     let _permit = sem.acquire().await.unwrap();
 
-                    info!("📄 コンテンツ取得開始: {}", bookmark.url);
+                    info!("📄 Starting content fetch: {}", bookmark.url);
 
-                    // コンテンツ取得（タイムアウト5秒）
+                    // Fetch content (5 second timeout)
                     let fetch_result =
                         timeout(Duration::from_secs(5), fetcher.fetch_page(&bookmark.url)).await;
 
                     match fetch_result {
                         Ok(Ok(html)) => {
-                            // コンテンツ抽出
+                            // Extract content
                             let content = fetcher.extract_content(&html);
 
-                            // tantivyインデックスを更新
+                            // Update tantivy index
                             let mut search = search.lock().await;
                             let content_text = content.text_content.as_deref();
                             if let Err(e) = search.update_bookmark(&bookmark, content_text) {
-                                warn!("インデックス更新失敗 {}: {}", bookmark.url, e);
+                                warn!("Index update failed {}: {}", bookmark.url, e);
                                 status.errors.fetch_add(1, Ordering::Relaxed);
                             } else {
-                                debug!("✅ インデックス更新成功: {}", bookmark.url);
+                                debug!("✅ Index update succeeded: {}", bookmark.url);
                             }
                         }
                         Ok(Err(e)) => {
-                            warn!("コンテンツ取得失敗 {}: {}", bookmark.url, e);
+                            warn!("Content fetch failed {}: {}", bookmark.url, e);
                             status.errors.fetch_add(1, Ordering::Relaxed);
                         }
                         Err(_) => {
-                            warn!("タイムアウト (5秒): {}", bookmark.url);
+                            warn!("Timeout (5s): {}", bookmark.url);
                             status.errors.fetch_add(1, Ordering::Relaxed);
                         }
                     }
 
-                    // 進捗更新
+                    // Update progress
                     let completed = status.completed.fetch_add(1, Ordering::Relaxed) + 1;
                     let total = status.total.load(Ordering::Relaxed);
 
-                    // 進捗表示（10%刻み、または最初/最後）
+                    // Show progress (10% increments, or first/last)
                     let percentage = (completed as f64 / total as f64 * 100.0) as u32;
                     let prev_percentage = ((completed - 1) as f64 / total as f64 * 100.0) as u32;
 
@@ -218,13 +218,13 @@ impl ContentIndexManager {
                         || completed == total
                         || (percentage / 10 != prev_percentage / 10) // 10%刻み
                         || (completed == 10 || completed == 50 || completed == 100)
-                    // マイルストーン
+                    // Milestone
                     {
                         info!("{}", status.status_string());
                     }
 
                     if completed == total {
-                        // 最終メタデータ更新
+                        // Final metadata update
                         let total_val = status.total.load(Ordering::Relaxed);
                         let errors = status.errors.load(Ordering::Relaxed);
                         let search = search_for_meta.lock().await;
@@ -232,71 +232,71 @@ impl ContentIndexManager {
                         drop(search);
 
                         status.is_complete.store(true, Ordering::Relaxed);
-                        info!("🎉 コンテンツインデックス構築完了！");
+                        info!("🎉 Content index build complete!");
                     }
                 });
 
                 handles.push(handle);
             }
 
-            // 全タスク完了を待つ
+            // Wait for all tasks to complete
             for handle in handles {
                 let _ = handle.await;
             }
         });
     }
 
-    /// 検索実行（tantivyのみ使用）
+    /// Execute search (using tantivy only)
     pub async fn search(&self, query: &str, limit: usize) -> Result<Vec<SearchResult>> {
-        // tantivyで検索
+        // Search with tantivy
         let search = self.tantivy_search.lock().await;
         let results = search.search(query, limit)?;
 
-        // インデックス構築中で結果が少ない場合の情報提供
+        // Provide information if few results during indexing
         if results.is_empty() && !self.indexing_status.is_complete.load(Ordering::Relaxed) {
             debug!(
-                "検索結果なし。{} (コンテンツインデックス構築中のため、完全な検索結果ではない可能性があります)",
+                "No search results. {} (Results may be incomplete as content index is still building)",
                 self.indexing_status.status_string()
             );
         } else if !results.is_empty() {
-            debug!("検索ヒット: {}件", results.len());
+            debug!("Search hits: {} items", results.len());
         }
 
         Ok(results)
     }
 
-    /// 高度な検索（フィルター付き）
+    /// Advanced search (with filters)
     pub async fn search_advanced(&self, params: &SearchParams) -> Result<Vec<SearchResult>> {
-        // tantivyのみ使用（フィルター検索はtantivyの機能）
+        // Use tantivy only (filter search is tantivy feature)
         let search = self.tantivy_search.lock().await;
         search.search_advanced(params)
     }
 
-    /// インデックス構築状況を取得
+    /// Index building statusを取得
     pub fn get_indexing_status(&self) -> String {
         self.indexing_status.status_string()
     }
 
-    /// インデックス構築が完了しているか
+    /// Check if index building is complete
     pub fn is_indexing_complete(&self) -> bool {
         self.indexing_status.is_complete.load(Ordering::Relaxed)
     }
 
-    /// URLから完全なコンテンツを取得（インデックスから、なければフェッチ）
+    /// Get full content from URL (from index, or fetch if not found)
     pub async fn get_content_by_url(&self, url: &str) -> Result<Option<String>> {
-        // まずインデックスから直接コンテンツを取得
+        // First try to get content directly from index
         let search = self.tantivy_search.lock().await;
 
-        // インデックスからフルコンテンツを取得
+        // Get full content from index
         if let Ok(Some(content)) = search.get_content_by_url(url) {
-            info!("インデックスからコンテンツ取得成功: {}", url);
+            info!("Content fetched from index successfully: {}", url);
             return Ok(Some(content));
         }
 
         drop(search);
 
-        // インデックスにない場合は新規フェッチ（元のブックマークURLでない場合など）
-        info!("URLのコンテンツを新規取得中: {}", url);
+        // Fetch new if not in index (e.g., not original bookmark URL)
+        info!("Fetching new content from URL: {}", url);
         match timeout(
             Duration::from_secs(10),
             self.content_fetcher.fetch_page(url),
@@ -308,11 +308,11 @@ impl ContentIndexManager {
                 Ok(content.text_content)
             }
             Ok(Err(e)) => {
-                warn!("コンテンツ取得失敗: {}: {}", url, e);
+                warn!("Content fetch failed: {}: {}", url, e);
                 Ok(None)
             }
             Err(_) => {
-                warn!("タイムアウト: {}", url);
+                warn!("Timeout: {}", url);
                 Ok(None)
             }
         }
@@ -325,18 +325,18 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_manager_creation() {
-        // テスト用の設定
+        // Test configuration
         let config = crate::config::Config::default();
         let reader = Arc::new(BookmarkReader::with_config(config).unwrap());
         let fetcher = Arc::new(ContentFetcher::new().unwrap());
 
-        // 検索マネージャー作成
+        // Create search manager
         let manager = ContentIndexManager::new(reader, fetcher).await.unwrap();
 
-        // インデックス構築状況を確認
+        // Check index building status
         assert!(!manager.is_indexing_complete());
         let status = manager.get_indexing_status();
-        assert!(status.contains("インデックス構築"));
+        assert!(status.contains("Building index") || status.contains("Index build"));
     }
 
     #[tokio::test]
@@ -348,9 +348,9 @@ mod tests {
 
         let manager = ContentIndexManager::new(reader, fetcher).await.unwrap();
 
-        // メタデータ検索（コンテンツなし）
+        // Metadata search (without content)
         let results = manager.search("test", 10).await.unwrap();
-        // 結果は環境依存なので、エラーがないことだけ確認
+        // Results are environment-dependent, just check for no errors
         let _ = results;
     }
 }

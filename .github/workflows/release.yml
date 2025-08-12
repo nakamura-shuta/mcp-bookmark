@@ -19,12 +19,6 @@ jobs:
           - target: aarch64-apple-darwin
             os: macos-latest
             name: mcp-bookmark-darwin-arm64
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
-            name: mcp-bookmark-linux-x64
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-            name: mcp-bookmark-windows-x64.exe
 
     steps:
       - uses: actions/checkout@v4
@@ -91,32 +85,26 @@ jobs:
             sudo mv mcp-bookmark /usr/local/bin/
             ```
             
-            ### Linux
-            ```bash
-            curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/mcp-bookmark-linux-x64 -o mcp-bookmark
-            chmod +x mcp-bookmark
-            sudo mv mcp-bookmark /usr/local/bin/
-            ```
-            
-            ### Windows
-            PowerShellで実行:
-            ```powershell
-            Invoke-WebRequest -Uri "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/mcp-bookmark-windows-x64.exe" -OutFile "mcp-bookmark.exe"
-            ```
-            
             ## Claude設定
             
-            `~/.config/claude/config.json` (Mac/Linux) または `%APPDATA%\Claude\config.json` (Windows):
+            `~/.config/claude/config.json`:
             
             ```json
             {
               "mcpServers": {
                 "mcp-bookmark": {
                   "command": "mcp-bookmark",
-                  "args": []
+                  "env": {
+                    "CHROME_PROFILE_NAME": "Work",
+                    "CHROME_TARGET_FOLDER": "Development"
+                  }
                 }
               }
             }
             ```
+            
+            **注意**: 
+            - このツールは現在macOS専用です
+            - `CHROME_PROFILE_NAME`にはChromeの表示名を使用してください（"Default"などのディレクトリ名ではありません）
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

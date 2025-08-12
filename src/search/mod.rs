@@ -83,16 +83,16 @@ impl SearchManager {
         let index_key = Self::get_index_key(config);
 
         info!("=================================================");
-        info!("インデックス設定:");
+        info!("Index configuration:");
         info!(
-            "  プロファイル: {}",
+            "  Profile: {}",
             config.profile_name.as_deref().unwrap_or("Default")
         );
         info!(
-            "  フォルダ: {}",
+            "  Folder: {}",
             config.target_folder.as_deref().unwrap_or("all")
         );
-        info!("  インデックス: ~/...mcp-bookmark/{}/", index_key);
+        info!("  Index: ~/...mcp-bookmark/{}/", index_key);
         info!("=================================================");
 
         Self::new_internal(index_path, Some(config))
@@ -107,13 +107,13 @@ impl SearchManager {
 
         // Open or create index
         let index = if index_path.join("meta.json").exists() {
-            info!("既存インデックスを使用: {:?}", index_path);
+            info!("Using existing index: {:?}", index_path);
 
             // Read and log metadata
             if let Ok(meta_content) = std::fs::read_to_string(index_path.join("meta.json")) {
                 if let Ok(meta) = serde_json::from_str::<IndexMetadata>(&meta_content) {
                     info!(
-                        "  最終更新: {}, ブックマーク数: {}",
+                        "  Last updated: {}, Bookmark count: {}",
                         meta.last_updated, meta.bookmark_count
                     );
                 }
@@ -121,7 +121,7 @@ impl SearchManager {
 
             Index::open_in_dir(&index_path).context("Failed to open existing index")?
         } else {
-            info!("新規インデックスを作成: {:?}", index_path);
+            info!("Creating new index: {:?}", index_path);
 
             // Write metadata if config is provided
             if let Some(cfg) = config {
@@ -220,7 +220,7 @@ impl SearchManager {
 
     /// Get full content by URL from index
     pub fn get_content_by_url(&self, url: &str) -> Result<Option<String>> {
-        // インデックスから直接フルコンテンツを取得
+        // Get full content directly from index
         self.searcher.get_full_content_by_url(url)
     }
 

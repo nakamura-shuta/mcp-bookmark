@@ -13,20 +13,72 @@ Chromeブックマークへのアクセスを提供するMCP (Model Context Prot
 - **フォルダフィルタ**: 特定フォルダのブックマークのみ公開
 - **独立インデックス管理**: プロファイル・フォルダごとに独立したインデックス
 
+## クイックスタート（最も簡単な方法）
+
+他のプロジェクトで使用する場合、`.mcp.json`で絶対パスを指定するだけ：
+
+```json
+{
+  "mcpServers": {
+    "mcp-bookmark": {
+      "command": "/path/to/mcp-bookmark/target/release/mcp-bookmark",
+      "env": {
+        "CHROME_TARGET_FOLDER": "Development"
+      }
+    }
+  }
+}
+```
+
+**インストール不要！** 一度ビルドして、バイナリのパスを参照するだけです。
+
 ## インストール
 
-### macOS (Apple Silicon)
+### オプション1: ビルド済みバイナリをダウンロード
+
+#### macOS (Apple Silicon)
 ```bash
-curl -L https://github.com/your-org/mcp-bookmark/releases/latest/download/mcp-bookmark-darwin-arm64 -o mcp-bookmark
+curl -L https://github.com/USERNAME/mcp-bookmark/releases/latest/download/mcp-bookmark-darwin-arm64 -o mcp-bookmark
 chmod +x mcp-bookmark
 sudo mv mcp-bookmark /usr/local/bin/
 ```
 
-### macOS (Intel)
+#### macOS (Intel)
 ```bash
-curl -L https://github.com/your-org/mcp-bookmark/releases/latest/download/mcp-bookmark-darwin-x64 -o mcp-bookmark
+curl -L https://github.com/USERNAME/mcp-bookmark/releases/latest/download/mcp-bookmark-darwin-x64 -o mcp-bookmark
 chmod +x mcp-bookmark
 sudo mv mcp-bookmark /usr/local/bin/
+```
+
+### オプション2: ソースからビルド
+
+```bash
+# リポジトリをクローン
+git clone https://github.com/USERNAME/mcp-bookmark.git
+cd mcp-bookmark
+
+# リリースバイナリをビルド
+cargo build --release
+
+# グローバルにインストール
+sudo cp target/release/mcp-bookmark /usr/local/bin/
+
+# またはシンボリックリンクを作成（代替案）
+sudo ln -s $(pwd)/target/release/mcp-bookmark /usr/local/bin/mcp-bookmark
+
+# またはPATHに追加（別の代替案）
+echo 'export PATH="'$(pwd)'/target/release:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+### インストールの確認
+
+```bash
+# mcp-bookmarkが利用可能か確認
+which mcp-bookmark
+
+# バイナリをテスト
+mcp-bookmark --help
 ```
 
 ## 設定
@@ -64,6 +116,8 @@ sudo mv mcp-bookmark /usr/local/bin/
 
 この設定により、プロジェクトごとに異なるブックマークフォルダや設定を使い分けることができます。
 
+**重要**: グローバルインストール後は`"command": "mcp-bookmark"`（絶対パスではない）を使用してください。これにより、異なるマシンやプロジェクト間で設定が機能します。
+
 ### 特定フォルダのみ公開
 
 ```json
@@ -98,16 +152,27 @@ sudo mv mcp-bookmark /usr/local/bin/
 
 ### プロファイル指定
 
+`CHROME_PROFILE_NAME`環境変数を設定することで、使用するChromeプロファイルを指定できます。プロファイル名はChromeで表示される表示名を使用し、内部的なディレクトリ名ではありません。
+
 ```json
 {
   "mcpServers": {
     "mcp-bookmark": {
       "command": "mcp-bookmark",
-      "args": ["--profile", "Work"]
+      "env": {
+        "CHROME_PROFILE_NAME": "仕事"  // "Default"などのディレクトリ名ではなく表示名を使用
+      }
     }
   }
 }
 ```
+
+利用可能なプロファイルを確認するには、MCPツールを使用するか、以下のコマンドを実行します：
+```bash
+mcp-bookmark --list-profiles
+```
+
+**注意**: `CHROME_PROFILE_NAME`を指定しない場合、サーバーは最大のブックマークファイルを持つプロファイルを自動検出して使用します。
 
 ## 使い方
 
@@ -177,7 +242,42 @@ mcp-bookmark --clear-index Default_Development
 mcp-bookmark --clear-all-indexes
 ```
 
+## 他のプロジェクトでの使用
+
+グローバルインストール後、プロジェクトのルートに`.mcp.json`ファイルを作成します：
+
+```json
+{
+  "mcpServers": {
+    "mcp-bookmark": {
+      "command": "mcp-bookmark",
+      "env": {
+        "RUST_LOG": "info",
+        "CHROME_PROFILE_NAME": "仕事",  // 表示名を使用（例："仕事"、"個人用"）
+        "CHROME_TARGET_FOLDER": "YourProjectFolder"
+      }
+    }
+  }
+}
+```
+
+**注意**: 
+- `CHROME_PROFILE_NAME`はChromeで表示される表示名（例："仕事"、"個人用"）を使用し、内部的なディレクトリ名（例："Default"、"Profile 1"）ではありません
+- `CHROME_TARGET_FOLDER`をプロジェクトのブックマークフォルダに合わせて調整してください
+- `CHROME_PROFILE_NAME`を省略した場合、サーバーは最大のブックマークファイルを持つプロファイルを自動検出します
+
 ## トラブルシューティング
+
+### よくある問題
+
+#### 「Connection failed: MCP error -32000」
+
+このエラーは通常、`mcp-bookmark`がグローバルにインストールされていないか、PATHに含まれていないことを意味します。
+
+**解決方法**:
+1. 上記のインストール方法のいずれかを使用してmcp-bookmarkをグローバルにインストール
+2. `which mcp-bookmark`でインストールを確認
+3. `.mcp.json`で`"command": "mcp-bookmark"`（絶対パスではない）を使用していることを確認
 
 ### Chromeプロファイルの確認
 

@@ -2,23 +2,23 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct Config {
-    /// 読み込むフォルダパスのリスト（空の場合は全て読み込む）
+    /// List of folder paths to load (load all if empty)
     #[serde(default)]
     pub include_folders: Vec<Vec<String>>,
 
-    /// 除外するフォルダパスのリスト
+    /// List of folder paths to exclude
     #[serde(default)]
     pub exclude_folders: Vec<Vec<String>>,
 
-    /// 最大取得ブックマーク数（0は無制限）
+    /// Maximum number of bookmarks to fetch (0 is unlimited)
     #[serde(default)]
     pub max_bookmarks: usize,
 
-    /// Chromeプロファイル名（表示名）
+    /// Chrome profile name (display name)
     #[serde(default)]
     pub profile_name: Option<String>,
 
-    /// 特定フォルダ名で検索（言語非依存）
+    /// Search by specific folder name (language independent)
     #[serde(default)]
     pub target_folder: Option<String>,
 }
