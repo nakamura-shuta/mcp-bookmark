@@ -11,4 +11,8 @@ mcp-bookmark.exe
 # MCP configuration file
 .mcp.json
 
+# Claude Code configuration
+CLAUDE.md
+
+# IDE settings
 /.vscode
