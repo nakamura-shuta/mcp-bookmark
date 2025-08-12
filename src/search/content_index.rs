@@ -88,7 +88,7 @@ impl IndexingStatus {
             };
 
             format!(
-                "📥 Building index: {}/{} ({:.1} errors, estimated remaining: {}s{:.0}秒",
+                "📥 Building index: {}/{} ({:.1}%, {} errors, estimated remaining: {}s)",
                 completed,
                 total,
                 self.progress_percentage(),

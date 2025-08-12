@@ -60,25 +60,15 @@ cd mcp-bookmark
 # リリースバイナリをビルド
 cargo build --release
 
-# グローバルにインストール
-sudo cp target/release/mcp-bookmark /usr/local/bin/
-
-# またはシンボリックリンクを作成（代替案）
-sudo ln -s $(pwd)/target/release/mcp-bookmark /usr/local/bin/mcp-bookmark
-
-# またはPATHに追加（別の代替案）
-echo 'export PATH="'$(pwd)'/target/release:$PATH"' >> ~/.zshrc
-source ~/.zshrc
+# バイナリは以下の場所で利用可能:
+# $(pwd)/target/release/mcp-bookmark
 ```
 
-### インストールの確認
+### ビルドの確認
 
 ```bash
-# mcp-bookmarkが利用可能か確認
-which mcp-bookmark
-
 # バイナリをテスト
-mcp-bookmark --help
+./target/release/mcp-bookmark --help
 ```
 
 ## 設定
@@ -91,7 +81,7 @@ mcp-bookmark --help
 {
   "mcpServers": {
     "mcp-bookmark": {
-      "command": "mcp-bookmark"
+      "command": "/full/path/to/mcp-bookmark/target/release/mcp-bookmark"
     }
   }
 }
@@ -107,7 +97,7 @@ mcp-bookmark --help
 {
   "mcpServers": {
     "mcp-bookmark": {
-      "command": "mcp-bookmark",
+      "command": "/full/path/to/mcp-bookmark/target/release/mcp-bookmark",
       "args": ["Development", "100"]
     }
   }
@@ -116,7 +106,6 @@ mcp-bookmark --help
 
 この設定により、プロジェクトごとに異なるブックマークフォルダや設定を使い分けることができます。
 
-**重要**: グローバルインストール後は`"command": "mcp-bookmark"`（絶対パスではない）を使用してください。これにより、異なるマシンやプロジェクト間で設定が機能します。
 
 ### 特定フォルダのみ公開
 
@@ -124,7 +113,7 @@ mcp-bookmark --help
 {
   "mcpServers": {
     "mcp-bookmark": {
-      "command": "mcp-bookmark",
+      "command": "/full/path/to/mcp-bookmark/target/release/mcp-bookmark",
       "args": ["Development", "100"]
     }
   }
@@ -139,7 +128,7 @@ mcp-bookmark --help
 {
   "mcpServers": {
     "mcp-bookmark": {
-      "command": "mcp-bookmark",
+      "command": "/full/path/to/mcp-bookmark/target/release/mcp-bookmark",
       "env": {
         "CHROME_TARGET_FOLDER": "Development/React"
       }
@@ -158,7 +147,7 @@ mcp-bookmark --help
 {
   "mcpServers": {
     "mcp-bookmark": {
-      "command": "mcp-bookmark",
+      "command": "/full/path/to/mcp-bookmark/target/release/mcp-bookmark",
       "env": {
         "CHROME_PROFILE_NAME": "仕事"  // "Default"などのディレクトリ名ではなく表示名を使用
       }
@@ -250,7 +239,7 @@ mcp-bookmark --clear-all-indexes
 {
   "mcpServers": {
     "mcp-bookmark": {
-      "command": "mcp-bookmark",
+      "command": "/full/path/to/mcp-bookmark/target/release/mcp-bookmark",
       "env": {
         "RUST_LOG": "info",
         "CHROME_PROFILE_NAME": "仕事",  // 表示名を使用（例："仕事"、"個人用"）
@@ -299,7 +288,7 @@ ls ~/Library/Application\ Support/Google/Chrome/*/Bookmarks
 {
   "mcpServers": {
     "mcp-bookmark": {
-      "command": "mcp-bookmark",
+      "command": "/full/path/to/mcp-bookmark/target/release/mcp-bookmark",
       "env": {"RUST_LOG": "debug"}
     }
   }

@@ -62,25 +62,15 @@ cd mcp-bookmark
 # Build the release binary
 cargo build --release
 
-# Install globally
-sudo cp target/release/mcp-bookmark /usr/local/bin/
-
-# Or create a symbolic link (alternative)
-sudo ln -s $(pwd)/target/release/mcp-bookmark /usr/local/bin/mcp-bookmark
-
-# Or add to PATH (another alternative)
-echo 'export PATH="'$(pwd)'/target/release:$PATH"' >> ~/.zshrc
-source ~/.zshrc
+# The binary will be available at:
+# $(pwd)/target/release/mcp-bookmark
 ```
 
-### Verify Installation
+### Verify Build
 
 ```bash
-# Check if mcp-bookmark is available
-which mcp-bookmark
-
 # Test the binary
-mcp-bookmark --help
+./target/release/mcp-bookmark --help
 ```
 
 ## Configuration
@@ -93,7 +83,7 @@ mcp-bookmark --help
 {
   "mcpServers": {
     "mcp-bookmark": {
-      "command": "mcp-bookmark"
+      "command": "/full/path/to/mcp-bookmark/target/release/mcp-bookmark"
     }
   }
 }
@@ -109,7 +99,7 @@ Place `.mcp.json` in your project root directory to enable project-specific MCP 
 {
   "mcpServers": {
     "mcp-bookmark": {
-      "command": "mcp-bookmark",
+      "command": "/full/path/to/mcp-bookmark/target/release/mcp-bookmark",
       "args": ["Development", "100"]
     }
   }
@@ -118,15 +108,13 @@ Place `.mcp.json` in your project root directory to enable project-specific MCP 
 
 This allows different bookmark folders and settings per project.
 
-**Important**: Use `"command": "mcp-bookmark"` (not an absolute path) after global installation. This ensures the configuration works across different machines and projects.
-
 ### Expose Specific Folder Only
 
 ```json
 {
   "mcpServers": {
     "mcp-bookmark": {
-      "command": "mcp-bookmark",
+      "command": "/full/path/to/mcp-bookmark/target/release/mcp-bookmark",
       "args": ["Development", "100"]
     }
   }
@@ -141,7 +129,7 @@ Use slash (`/`) to specify subfolders:
 {
   "mcpServers": {
     "mcp-bookmark": {
-      "command": "mcp-bookmark",
+      "command": "/full/path/to/mcp-bookmark/target/release/mcp-bookmark",
       "env": {
         "CHROME_TARGET_FOLDER": "Development/React"
       }
@@ -160,7 +148,7 @@ You can specify which Chrome profile to use by setting the `CHROME_PROFILE_NAME`
 {
   "mcpServers": {
     "mcp-bookmark": {
-      "command": "mcp-bookmark",
+      "command": "/full/path/to/mcp-bookmark/target/release/mcp-bookmark",
       "env": {
         "CHROME_PROFILE_NAME": "Work"  // Use display name, not directory name like "Default"
       }
@@ -246,13 +234,13 @@ mcp-bookmark --clear-all-indexes
 
 ## Using in Other Projects
 
-After global installation, create a `.mcp.json` file in your project root:
+Create a `.mcp.json` file in your project root with the full path to the binary:
 
 ```json
 {
   "mcpServers": {
     "mcp-bookmark": {
-      "command": "mcp-bookmark",
+      "command": "/full/path/to/mcp-bookmark/target/release/mcp-bookmark",
       "env": {
         "RUST_LOG": "info",
         "CHROME_PROFILE_NAME": "Work",  // Use display name (e.g., "Work", "Personal")
@@ -274,12 +262,12 @@ After global installation, create a `.mcp.json` file in your project root:
 
 #### "Connection failed: MCP error -32000"
 
-This error typically means `mcp-bookmark` is not installed globally or not in PATH.
+This error typically means the binary path is incorrect or the binary doesn't exist.
 
 **Solution**:
-1. Install mcp-bookmark globally using one of the installation methods above
-2. Verify installation with `which mcp-bookmark`
-3. Ensure your `.mcp.json` uses `"command": "mcp-bookmark"` (not an absolute path)
+1. Ensure the binary is built: `cargo build --release`
+2. Verify the full path to the binary is correct
+3. Ensure your `.mcp.json` uses the full absolute path to the binary
 
 ### Check Chrome Profiles
 
@@ -302,7 +290,7 @@ Change log level:
 {
   "mcpServers": {
     "mcp-bookmark": {
-      "command": "mcp-bookmark",
+      "command": "/full/path/to/mcp-bookmark/target/release/mcp-bookmark",
       "env": { "RUST_LOG": "debug" }
     }
   }

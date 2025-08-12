@@ -93,7 +93,7 @@ jobs:
             {
               "mcpServers": {
                 "mcp-bookmark": {
-                  "command": "mcp-bookmark",
+                  "command": "/usr/local/bin/mcp-bookmark",
                   "env": {
                     "CHROME_PROFILE_NAME": "Work",
                     "CHROME_TARGET_FOLDER": "Development"
