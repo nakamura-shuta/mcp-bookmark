@@ -121,36 +121,70 @@ impl ContentFetcher {
         metadata
     }
 
-    pub fn extract_content(&self, html: &str) -> PageContent {
-        let document = Html::parse_document(html);
-
-        let title_selector = Selector::parse("title").ok();
-        let body_selector = Selector::parse("body").ok();
-        let article_selector = Selector::parse("article, main, [role='main']").ok();
-
+    pub fn extract_content(&self, html: &str, url: &str) -> PageContent {
+        // Try readability first for clean article extraction
         let mut content = PageContent {
             text_content: None,
             main_content: None,
             html_title: None,
         };
 
+        // Extract title using scraper (faster for just title)
+        let document = Html::parse_document(html);
+        let title_selector = Selector::parse("title").ok();
         if let Some(selector) = title_selector {
             if let Some(element) = document.select(&selector).next() {
                 content.html_title = Some(element.inner_html().trim().to_string());
             }
         }
 
-        if let Some(selector) = body_selector {
-            if let Some(element) = document.select(&selector).next() {
-                let text = self.extract_text_from_element(element);
-                content.text_content = Some(text);
-            }
-        }
+        // Use readability to extract clean article content
+        // Parse URL, fallback to dummy URL if parsing fails
+        let parsed_url = url::Url::parse(url)
+            .unwrap_or_else(|_| url::Url::parse("https://example.com").unwrap());
 
-        if let Some(selector) = article_selector {
-            if let Some(element) = document.select(&selector).next() {
-                let text = self.extract_text_from_element(element);
-                content.main_content = Some(text);
+        // Convert HTML string to a reader
+        let mut cursor = std::io::Cursor::new(html);
+
+        match readability::extractor::extract(&mut cursor, &parsed_url) {
+            Ok(product) => {
+                // Use readability's extracted content (clean article text)
+                content.text_content = Some(product.text.clone());
+
+                // Also store the HTML content if needed for rich display
+                if !product.content.is_empty() {
+                    // Extract text from the cleaned HTML
+                    let clean_doc = Html::parse_document(&product.content);
+                    let body_selector = Selector::parse("body").ok();
+                    if let Some(selector) = body_selector {
+                        if let Some(element) = clean_doc.select(&selector).next() {
+                            let text = self.extract_text_from_element(element);
+                            content.main_content = Some(text);
+                        }
+                    } else {
+                        // If no body tag, use the entire content
+                        content.main_content = Some(product.text);
+                    }
+                }
+            }
+            Err(_) => {
+                // Fallback to original method if readability fails
+                let body_selector = Selector::parse("body").ok();
+                let article_selector = Selector::parse("article, main, [role='main']").ok();
+
+                if let Some(selector) = body_selector {
+                    if let Some(element) = document.select(&selector).next() {
+                        let text = self.extract_text_from_element(element);
+                        content.text_content = Some(text);
+                    }
+                }
+
+                if let Some(selector) = article_selector {
+                    if let Some(element) = document.select(&selector).next() {
+                        let text = self.extract_text_from_element(element);
+                        content.main_content = Some(text);
+                    }
+                }
             }
         }
 

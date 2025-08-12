@@ -184,7 +184,7 @@ impl ContentIndexManager {
                     match fetch_result {
                         Ok(Ok(html)) => {
                             // Extract content
-                            let content = fetcher.extract_content(&html);
+                            let content = fetcher.extract_content(&html, &bookmark.url);
 
                             // Update tantivy index
                             let mut search = search.lock().await;
@@ -304,7 +304,7 @@ impl ContentIndexManager {
         .await
         {
             Ok(Ok(html)) => {
-                let content = self.content_fetcher.extract_content(&html);
+                let content = self.content_fetcher.extract_content(&html, url);
                 Ok(content.text_content)
             }
             Ok(Err(e)) => {
