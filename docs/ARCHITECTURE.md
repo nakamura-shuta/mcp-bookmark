@@ -24,7 +24,7 @@ Chrome Bookmark MCP Server provides read-only access to Chrome bookmarks via the
 ## Configuration
 
 Set via environment variables:
-- `CHROME_PROFILE_NAME` - Chrome profile (e.g., "Nakamura", "Default")
+- `CHROME_PROFILE_NAME` - Chrome profile (e.g., "Work", "Default")
 - `CHROME_TARGET_FOLDER` - Bookmark folder (e.g., "Development", "Tech/React", "all")
 
 ## Index Management
@@ -32,7 +32,7 @@ Set via environment variables:
 ### Storage Structure
 ```
 ~/Library/Application Support/mcp-bookmark/
-├── Nakamura_my_test/        # Profile: Nakamura, Folder: my_test
+├── Work_Development/        # Profile: Work, Folder: Development
 ├── Default_Development/     # Profile: Default, Folder: Development  
 ├── Default_all/             # Profile: Default, Folder: all
 └── logs/
@@ -40,7 +40,7 @@ Set via environment variables:
 
 ### Index Isolation
 - Each profile-folder combination has its own independent index
-- Example keys: `Nakamura_my_test`, `Default_Development`, `Default_all`
+- Example keys: `Work_Development`, `Default_Development`, `Default_all`
 - Subfolder support with slash separator (e.g., "Tech/React" → "Tech_React")
 
 ### Search Features

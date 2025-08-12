@@ -1155,7 +1155,6 @@ name = "mcp-bookmark"
 version = "0.2.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "chrono",
  "dirs",
  "reqwest",

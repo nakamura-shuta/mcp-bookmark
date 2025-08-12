@@ -1,19 +1,22 @@
+[日本語](README.ja.md) | English
+
 # Chrome Bookmark MCP Server
 
-Chromeブックマークへのアクセスを提供するMCP (Model Context Protocol) サーバー
+MCP (Model Context Protocol) server providing access to Chrome bookmarks
 
-## 機能
+## Features
 
-- **高速全文検索**: tantivy検索エンジンによるブックマーク内容の検索（検索結果に抜粋付き）
-- **コンテンツキャッシュ**: インデックスDBから直接コンテンツ取得（リモート再取得不要）
-- **自動インデックス**: バックグラウンドでWebページ内容を自動取得・保存
-- **プロファイル対応**: 複数のChromeプロファイルから選択可能
-- **フォルダフィルタ**: 特定フォルダのブックマークのみ公開
-- **独立インデックス管理**: プロファイル・フォルダごとに独立したインデックス
+- **Fast Full-Text Search**: Bookmark content search powered by tantivy search engine (with snippets in results)
+- **Content Caching**: Direct content retrieval from index DB (no remote fetching required)
+- **Auto-Indexing**: Automatic background fetching and storing of web page content
+- **Profile Support**: Select from multiple Chrome profiles
+- **Folder Filtering**: Expose only specific folder bookmarks
+- **Independent Index Management**: Separate indexes per profile/folder combination
 
-## インストール
+## Installation
 
 ### macOS (Apple Silicon)
+
 ```bash
 curl -L https://github.com/your-org/mcp-bookmark/releases/latest/download/mcp-bookmark-darwin-arm64 -o mcp-bookmark
 chmod +x mcp-bookmark
@@ -21,15 +24,16 @@ sudo mv mcp-bookmark /usr/local/bin/
 ```
 
 ### macOS (Intel)
+
 ```bash
 curl -L https://github.com/your-org/mcp-bookmark/releases/latest/download/mcp-bookmark-darwin-x64 -o mcp-bookmark
 chmod +x mcp-bookmark
 sudo mv mcp-bookmark /usr/local/bin/
 ```
 
-## 設定
+## Configuration
 
-### 基本設定
+### Basic Configuration
 
 `~/.config/claude/config.json`:
 
@@ -43,9 +47,9 @@ sudo mv mcp-bookmark /usr/local/bin/
 }
 ```
 
-### プロジェクト単位での設定
+### Project-Specific Configuration
 
-プロジェクトのルートディレクトリに`.mcp.json`を配置することで、そのプロジェクト専用のMCP設定を有効にできます。
+Place `.mcp.json` in your project root directory to enable project-specific MCP configuration.
 
 `.mcp.json`:
 
@@ -60,9 +64,9 @@ sudo mv mcp-bookmark /usr/local/bin/
 }
 ```
 
-この設定により、プロジェクトごとに異なるブックマークフォルダや設定を使い分けることができます。
+This allows different bookmark folders and settings per project.
 
-### 特定フォルダのみ公開
+### Expose Specific Folder Only
 
 ```json
 {
@@ -75,9 +79,9 @@ sudo mv mcp-bookmark /usr/local/bin/
 }
 ```
 
-### サブフォルダの指定
+### Subfolder Specification
 
-スラッシュ（`/`）を使ってサブフォルダを指定できます：
+Use slash (`/`) to specify subfolders:
 
 ```json
 {
@@ -92,9 +96,9 @@ sudo mv mcp-bookmark /usr/local/bin/
 }
 ```
 
-この機能により、ネストされた特定のサブフォルダのみを公開できます。
+This feature allows exposing only specific nested subfolders.
 
-### プロファイル指定
+### Profile Specification
 
 ```json
 {
@@ -107,110 +111,112 @@ sudo mv mcp-bookmark /usr/local/bin/
 }
 ```
 
-## 使い方
+## Usage
 
-### コマンドライン
+### Command Line
 
 ```bash
-mcp-bookmark                        # 全ブックマーク
-mcp-bookmark Development            # Developmentフォルダのみ
-mcp-bookmark Development 100        # 最大100件
-mcp-bookmark Work,Tech              # 複数フォルダ
+mcp-bookmark                        # All bookmarks
+mcp-bookmark Development            # Development folder only
+mcp-bookmark Development 100        # Max 100 items
+mcp-bookmark Work,Tech              # Multiple folders
 
-mcp-bookmark --profile Work         # Workプロファイル
-mcp-bookmark --folder Development   # 特定フォルダ
-mcp-bookmark --exclude Archive      # フォルダ除外
+mcp-bookmark --profile Work         # Work profile
+mcp-bookmark --folder Development   # Specific folder
+mcp-bookmark --exclude Archive      # Exclude folder
 
-# インデックス管理
-mcp-bookmark --list-indexes         # インデックス一覧
-mcp-bookmark --clear-index          # 現在設定のインデックスをクリア
-mcp-bookmark --clear-all-indexes    # 全インデックスをクリア
+# Index management
+mcp-bookmark --list-indexes         # List indexes
+mcp-bookmark --clear-index          # Clear current config index
+mcp-bookmark --clear-all-indexes    # Clear all indexes
 ```
 
-### 利用可能なツール（MCPクライアント向け）
+### Available Tools (for MCP Clients)
 
-1. **search_bookmarks** - タイトルやURLでブックマークを検索
-2. **search_bookmarks_fulltext** - 全文検索（コンテンツ含む、結果に抜粋付き）
-3. **get_bookmark_content** - URLから完全なコンテンツを取得（インデックスDBから）
-4. **list_bookmark_folders** - ブックマークフォルダ一覧を取得
-5. **get_indexing_status** - インデックス構築状況を確認
-6. **get_available_profiles** - 利用可能なChromeプロファイル一覧を取得
+1. **search_bookmarks** - Search bookmarks by title or URL
+2. **search_bookmarks_fulltext** - Full-text search (including content, with snippets in results)
+3. **get_bookmark_content** - Get full content from URL (from index DB)
+4. **list_bookmark_folders** - Get list of bookmark folders
+5. **get_indexing_status** - Check indexing status
+6. **get_available_profiles** - Get list of available Chrome profiles
 
-### AI アシスタントでの使用例
+### Usage Examples with AI Assistant
 
 ```
-「Developmentフォルダのブックマークを検索して」
-「React関連のドキュメントを探して」
-「最近追加したブックマークを表示」
-「このURLのページ内容を詳しく教えて」（get_bookmark_contentで全文取得）
+"Search bookmarks in Development folder"
+"Find React-related documentation"
+"Show recently added bookmarks"
+"Tell me more about the content of this URL" (retrieves full text with get_bookmark_content)
 ```
 
-## インデックス管理
+## Index Management
 
-検索インデックスは、プロファイルとフォルダの組み合わせごとに独立して管理されます：
+Search indexes are managed independently for each profile and folder combination:
 
 ```
 ~/Library/Application Support/mcp-bookmark/
-├── Default_Development/      # Defaultプロファイル、Developmentフォルダ
-├── Work_Tech_React/         # Workプロファイル、Tech/Reactフォルダ
-└── Personal_all/            # Personalプロファイル、全ブックマーク
+├── Default_Development/      # Default profile, Development folder
+├── Work_Tech_React/         # Work profile, Tech/React folder
+└── Personal_all/            # Personal profile, all bookmarks
 ```
 
-### 特徴
+### Features
 
-- **分離管理**: 異なるプロジェクトで同じプロファイル・フォルダを指定すれば、同じインデックスを共有
-- **自動作成**: 初回起動時に自動でインデックスを作成
-- **バックグラウンド更新**: サーバー起動後、コンテンツを段階的にインデックス化
+- **Isolated Management**: Projects with same profile/folder settings share the same index
+- **Auto-Creation**: Index created automatically on first launch
+- **Background Updates**: Content indexed progressively after server starts
 
-### 管理コマンド
+### Management Commands
 
 ```bash
-# インデックス一覧（サイズと更新日時を表示）
+# List indexes (shows size and update time)
 mcp-bookmark --list-indexes
 
-# 特定インデックスをクリア
+# Clear specific index
 mcp-bookmark --clear-index Default_Development
 
-# 全インデックスをクリア
+# Clear all indexes
 mcp-bookmark --clear-all-indexes
 ```
 
-## トラブルシューティング
+## Troubleshooting
 
-### Chromeプロファイルの確認
+### Check Chrome Profiles
 
 ```bash
-# プロファイル一覧
+# List profiles
 ls ~/Library/Application\ Support/Google/Chrome/*/Bookmarks
 
-# chrome://version/ でプロファイルパスを確認
+# Check profile path at chrome://version/
 ```
 
-### ログファイル
+### Log Files
 
 ```
 ~/Library/Application Support/mcp-bookmark/logs/
 ```
 
-ログレベル変更:
+Change log level:
+
 ```json
 {
   "mcpServers": {
     "mcp-bookmark": {
       "command": "mcp-bookmark",
-      "env": {"RUST_LOG": "debug"}
+      "env": { "RUST_LOG": "debug" }
     }
   }
 }
 ```
 
-## 検索インデックス
+## Search Index
 
-インデックスは自動的に構築され、以下に保存されます：
+The index is built automatically and stored at:
+
 ```
 ~/Library/Application Support/mcp-bookmark/index/
 ```
 
-## ライセンス
+## License
 
 MIT

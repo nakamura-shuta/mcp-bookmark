@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "mcp-bookmark": {
+      "command": "mcp-bookmark",
+      "args": [],
+      "env": {
+        "RUST_LOG": "info",
+        "CHROME_PROFILE_NAME": "Default",
+        "CHROME_TARGET_FOLDER": "Development"
+      }
+    }
+  }
+}
