@@ -272,7 +272,7 @@ impl ContentIndexManager {
         search.search_advanced(params)
     }
 
-    /// Index building statusを取得
+    /// Get Index building status
     pub fn get_indexing_status(&self) -> String {
         self.indexing_status.status_string()
     }
