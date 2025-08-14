@@ -1,6 +1,10 @@
-/internal_docs
+# Rust
 /target
-/.claude
+**/*.rs.bk
+*.pdb
+
+# Internal documentation
+/internal_docs
 
 # Built binaries
 mcp-bookmark-darwin-*
@@ -8,11 +12,37 @@ mcp-bookmark-linux-*
 mcp-bookmark-windows-*
 mcp-bookmark.exe
 
-# MCP configuration file
+# MCP configuration
 .mcp.json
+/.claude
 
 # Claude Code configuration
 CLAUDE.md
 
 # IDE settings
 /.vscode
+/.idea
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+/logs
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*~
+
+# Test artifacts
+/test-output
+/coverage
+
+# Chrome extension build artifacts
+bookmark-indexer-extension/*.zip
+bookmark-indexer-extension/node_modules

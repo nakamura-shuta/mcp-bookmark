@@ -2,180 +2,94 @@
 
 # Chrome Bookmark MCP Server
 
-**⚠️ macOS and Chrome Only**: This tool currently supports only macOS and Google Chrome.
+MCP (Model Context Protocol) server that provides AI assistants with access to your Chrome bookmarks with full-text search capabilities.
 
-MCP (Model Context Protocol) server providing AI assistants with access to your Chrome bookmarks with full-text search capabilities.
+**⚠️ macOS and Chrome Only**: Currently supports only macOS and Google Chrome.
 
 ## Features
 
-- **Full-Text Search**: Search bookmark content using the tantivy search engine
-- **Chrome Profile Support**: Works with multiple Chrome profiles
+- **Full-Text Search**: Search bookmark content using Tantivy search engine
+- **Chrome Extension**: Index bookmark content directly from browser
+- **Multiple Profiles**: Support for multiple Chrome profiles
 - **Folder Filtering**: Expose only specific bookmark folders
-- **Auto-indexing**: Background indexing of web page content
-- **Chrome Extension**: Optional extension for enhanced content indexing
 
-## Requirements
+## Quick Start
 
-- macOS
-- Google Chrome
-- Rust 1.70+ (for building from source)
-
-## Installation
-
-### Build from Source
+### 1. Build the Server
 
 ```bash
-# Clone the repository
+# Clone and build
 git clone https://github.com/USERNAME/mcp-bookmark.git
 cd mcp-bookmark
-
-# Build the release binary
 cargo build --release
 
-# Test the build
+# Verify installation
 ./target/release/mcp-bookmark --help
 ```
 
-## Configuration
+### 2. Install Chrome Extension (Recommended)
 
-### Basic Setup
+The Chrome extension provides better content indexing:
 
-Create a `.mcp.json` file in your project root:
+1. Build the native messaging host:
+   ```bash
+   cargo build --release --bin mcp-bookmark-native
+   ```
 
-```json
-{
-  "mcpServers": {
-    "mcp-bookmark": {
-      "command": "/path/to/mcp-bookmark/target/release/mcp-bookmark"
-    }
-  }
-}
-```
+2. Install the extension - see [Extension README](bookmark-indexer-extension/README.md)
 
-### Advanced Options
+### 3. Configure MCP
 
-#### Specific Folder
-```json
-{
-  "mcpServers": {
-    "mcp-bookmark": {
-      "command": "/path/to/mcp-bookmark/target/release/mcp-bookmark",
-      "env": {
-        "CHROME_TARGET_FOLDER": "Development"
-      }
-    }
-  }
-}
-```
+Add to your Claude Desktop config:
 
-#### Chrome Profile
 ```json
 {
   "mcpServers": {
     "mcp-bookmark": {
       "command": "/path/to/mcp-bookmark/target/release/mcp-bookmark",
       "env": {
-        "CHROME_PROFILE_NAME": "Work"
+        "CHROME_PROFILE_NAME": "Extension",
+        "CHROME_TARGET_FOLDER": "your-folder-name"
       }
     }
   }
 }
 ```
-
-Note: Use the display name shown in Chrome (e.g., "Work", "Personal"), not internal directory names.
 
 ## Usage
 
-### Command Line
+### With Chrome Extension (Recommended)
+
+1. Open the Chrome extension popup
+2. Select a folder to index
+3. Click "Index Selected Folder"
+4. Use the indexed content in your AI assistant
+
+### Command Line Options
 
 ```bash
-# Basic usage
-mcp-bookmark                        # All bookmarks
-mcp-bookmark Development            # Specific folder
-mcp-bookmark Development 10         # Max 10 from Development
-
-# Profile and folder options
-mcp-bookmark --profile Work --folder Development
+# Use pre-built index from Chrome extension
+CHROME_PROFILE_NAME="Extension" CHROME_TARGET_FOLDER="Development" ./target/release/mcp-bookmark
 
 # Index management
-mcp-bookmark --list-indexes         # List indexes
-mcp-bookmark --clear-index          # Clear index for current config
-mcp-bookmark --clear-index Work_Tech  # Clear specific index
-mcp-bookmark --clear-all-indexes    # Clear all indexes
+./target/release/mcp-bookmark --list-indexes
+./target/release/mcp-bookmark --clear-index
 ```
 
-### Available MCP Tools
+## MCP Tools Available
 
-1. **search_bookmarks** - Search by title or URL
-2. **search_bookmarks_fulltext** - Full-text content search
-3. **get_bookmark_content** - Retrieve full page content
-4. **list_bookmark_folders** - List available folders
-5. **get_available_profiles** - List Chrome profiles
+- `search_bookmarks` - Search by title/URL
+- `search_bookmarks_fulltext` - Full-text content search
+- `get_bookmark_content` - Get content for specific URL
+- `list_bookmark_folders` - List available folders
+- `get_indexing_status` - Check indexing progress
 
-### Usage with AI Assistant
-
-```
-"Search bookmarks in Development folder"
-"Find React documentation"
-"Show recently added bookmarks"
-```
-
-## Chrome Extension (Optional)
-
-The extension enhances content indexing by fetching web page content directly from Chrome.
-
-### Installation Steps
-
-1. **Build Native Host**:
-```bash
-cargo build --release --bin mcp-bookmark-native
-```
-
-2. **Configure Native Messaging** (run from project root):
-```bash
-# Run this from the project root directory
-cat > ~/Library/Application\ Support/Google/Chrome/NativeMessagingHosts/com.mcp_bookmark.json << EOF
-{
-  "name": "com.mcp_bookmark",
-  "description": "Bookmark Indexer Native Host",
-  "path": "$(pwd)/target/release/mcp-bookmark-native",
-  "type": "stdio",
-  "allowed_origins": [
-    "chrome-extension://YOUR_EXTENSION_ID/"
-  ]
-}
-EOF
-```
-
-3. **Install Extension**:
-   - Open `chrome://extensions/`
-   - Enable "Developer mode"
-   - Click "Load unpacked"
-   - Select `bookmark-indexer-extension` folder
-   - Note the Extension ID
-
-4. **Update Configuration**:
-```bash
-# Replace with your actual extension ID
-EXTENSION_ID="your-extension-id"
-sed -i "" "s/YOUR_EXTENSION_ID/$EXTENSION_ID/g" \
-  ~/Library/Application\ Support/Google/Chrome/NativeMessagingHosts/com.mcp_bookmark.json
-```
-
-5. **Restart Chrome completely**
-
-### Extension Usage
-
-- Click extension icon in toolbar
-- Select bookmark folder
-- Click "Index Selected Folder"
-
-## Index Location
+## Index Storage
 
 Indexes are stored at:
-```
-~/Library/Application Support/mcp-bookmark/index/
-```
+- macOS: `~/Library/Application Support/mcp-bookmark/`
+
+Each profile/folder combination has its own index.
 
 ## License
 

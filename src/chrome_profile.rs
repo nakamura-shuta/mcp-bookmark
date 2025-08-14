@@ -243,6 +243,6 @@ mod tests {
     fn test_profile_resolver_creation() {
         // Create profile resolver
         let resolver = ProfileResolver::new();
-        assert!(resolver.is_ok() || resolver.is_err()); // 環境依存
+        assert!(resolver.is_ok() || resolver.is_err()); // Environment dependent
     }
 }

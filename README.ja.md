@@ -2,59 +2,45 @@
 
 # Chrome Bookmark MCP Server
 
-**⚠️ macOS と Chrome 限定**: このツールは現在 macOS と Google Chrome のみをサポートしています。
+Chrome ブックマークを AI アシスタントから利用できるようにする MCP (Model Context Protocol) サーバー。全文検索機能付き。
 
-Chrome ブックマークを AI アシスタントから全文検索できる MCP (Model Context Protocol) サーバー
+**⚠️ macOS と Chrome のみ対応**: 現在 macOS と Google Chrome のみサポートしています。
 
 ## 機能
 
-- **全文検索**: Tantivy エンジンによるブックマークコンテンツ検索
-- **Chrome プロファイル対応**: 複数の Chrome プロファイルに対応
+- **全文検索**: Tantivy 検索エンジンによるコンテンツ検索
+- **Chrome 拡張機能**: ブラウザから直接コンテンツをインデックス化
+- **複数プロファイル対応**: Chrome の複数プロファイルをサポート
 - **フォルダフィルタリング**: 特定のブックマークフォルダのみ公開
-- **自動インデックス**: Web ページコンテンツの自動インデックス化
-- **Chrome 拡張機能**: コンテンツインデックス化を強化する拡張機能（オプション）
 
-## 動作要件
+## クイックスタート
 
-- macOS
-- Google Chrome
-- Rust 1.70 以上（ソースからビルドする場合）
-
-## インストール
-
-### ソースからビルド
+### 1. サーバーのビルド
 
 ```bash
-# リポジトリをクローン
+# クローンとビルド
 git clone https://github.com/USERNAME/mcp-bookmark.git
 cd mcp-bookmark
-
-# リリースバイナリをビルド
 cargo build --release
 
-# ビルドを確認
+# インストール確認
 ./target/release/mcp-bookmark --help
 ```
 
-## 設定
+### 2. Chrome 拡張機能のインストール（推奨）
 
-### 基本設定
+Chrome 拡張機能でより良いコンテンツインデックスを実現：
 
-プロジェクトルートに`.mcp.json`ファイルを作成：
+1. Native Messaging Host をビルド：
+   ```bash
+   cargo build --release --bin mcp-bookmark-native
+   ```
 
-```json
-{
-  "mcpServers": {
-    "mcp-bookmark": {
-      "command": "/path/to/mcp-bookmark/target/release/mcp-bookmark"
-    }
-  }
-}
-```
+2. 拡張機能をインストール - [拡張機能 README](bookmark-indexer-extension/README.md) 参照
 
-### 詳細設定
+### 3. MCP の設定
 
-#### 特定フォルダのみ
+Claude Desktop の設定に追加：
 
 ```json
 {
@@ -62,127 +48,48 @@ cargo build --release
     "mcp-bookmark": {
       "command": "/path/to/mcp-bookmark/target/release/mcp-bookmark",
       "env": {
-        "CHROME_TARGET_FOLDER": "Development"
+        "CHROME_PROFILE_NAME": "Extension",
+        "CHROME_TARGET_FOLDER": "your-folder-name"
       }
     }
   }
 }
 ```
-
-#### Chrome プロファイル指定
-
-```json
-{
-  "mcpServers": {
-    "mcp-bookmark": {
-      "command": "/path/to/mcp-bookmark/target/release/mcp-bookmark",
-      "env": {
-        "CHROME_PROFILE_NAME": "仕事"
-      }
-    }
-  }
-}
-```
-
-注: Chrome に表示される表示名（例："仕事"、"個人用"）を使用してください。
 
 ## 使い方
 
-### コマンドライン
+### Chrome 拡張機能を使用（推奨）
+
+1. Chrome 拡張機能のポップアップを開く
+2. インデックス化するフォルダを選択
+3. 「Index Selected Folder」をクリック
+4. AI アシスタントでインデックス化されたコンテンツを使用
+
+### コマンドラインオプション
 
 ```bash
-# 基本的な使い方
-mcp-bookmark                        # 全ブックマーク
-mcp-bookmark Development            # 特定フォルダ
-mcp-bookmark Development 10         # Developmentから最大10件
-
-# プロファイルとフォルダ指定
-mcp-bookmark --profile 仕事 --folder Development
+# Chrome 拡張機能の事前ビルド済みインデックスを使用
+CHROME_PROFILE_NAME="Extension" CHROME_TARGET_FOLDER="Development" ./target/release/mcp-bookmark
 
 # インデックス管理
-mcp-bookmark --list-indexes         # インデックス一覧
-mcp-bookmark --clear-index          # 現在(環境変数やデフォルト）の設定に対応するインデックスをクリア
-mcp-bookmark --clear-index 仕事_mcp-rust  # 特定のインデックスをクリア
-mcp-bookmark --clear-all-indexes    # 全インデックスをクリア
+./target/release/mcp-bookmark --list-indexes
+./target/release/mcp-bookmark --clear-index
 ```
 
-### MCP ツール一覧
+## 利用可能な MCP ツール
 
-1. **search_bookmarks** - タイトルや URL で検索
-2. **search_bookmarks_fulltext** - 全文検索
-3. **get_bookmark_content** - ページ全文を取得
-4. **list_bookmark_folders** - フォルダ一覧を取得
-5. **get_available_profiles** - Chrome プロファイル一覧
+- `search_bookmarks` - タイトル/URL で検索
+- `search_bookmarks_fulltext` - 全文コンテンツ検索
+- `get_bookmark_content` - 特定 URL のコンテンツ取得
+- `list_bookmark_folders` - 利用可能なフォルダ一覧
+- `get_indexing_status` - インデックス化の進捗確認
 
-### AI アシスタントでの使用例
-
-```
-「Developmentフォルダのブックマークを検索」
-「React関連のドキュメントを探して」
-「最近追加したブックマークを表示」
-```
-
-## Chrome 拡張機能（オプション）
-
-Chrome 拡張機能を使用すると、Web ページコンテンツを直接 Chrome から取得してインデックス化できます。
-
-### インストール手順
-
-1. **Native Host をビルド**:
-
-```bash
-cargo build --release --bin mcp-bookmark-native
-```
-
-2. **Native Messaging を設定**（プロジェクトルートで実行）:
-
-```bash
-# プロジェクトルートから実行してください
-cat > ~/Library/Application\ Support/Google/Chrome/NativeMessagingHosts/com.mcp_bookmark.json << EOF
-{
-  "name": "com.mcp_bookmark",
-  "description": "Bookmark Indexer Native Host",
-  "path": "$(pwd)/target/release/mcp-bookmark-native",
-  "type": "stdio",
-  "allowed_origins": [
-    "chrome-extension://YOUR_EXTENSION_ID/"
-  ]
-}
-EOF
-```
-
-3. **拡張機能をインストール**:
-
-   - `chrome://extensions/`を開く
-   - 「デベロッパーモード」を有効化
-   - 「パッケージ化されていない拡張機能を読み込む」をクリック
-   - `bookmark-indexer-extension`フォルダを選択
-   - 表示された拡張機能 ID をメモ
-
-4. **設定を更新**:
-
-```bash
-# 実際の拡張機能IDに置き換え
-EXTENSION_ID="拡張機能ID"
-sed -i "" "s/YOUR_EXTENSION_ID/$EXTENSION_ID/g" \
-  ~/Library/Application\ Support/Google/Chrome/NativeMessagingHosts/com.mcp_bookmark.json
-```
-
-5. **Chrome を完全に再起動**
-
-### 拡張機能の使い方
-
-- ツールバーの拡張機能アイコンをクリック
-- ブックマークフォルダを選択
-- 「Index Selected Folder」をクリック
-
-## インデックスの場所
+## インデックスの保存場所
 
 インデックスは以下に保存されます：
+- macOS: `~/Library/Application Support/mcp-bookmark/`
 
-```
-~/Library/Application Support/mcp-bookmark/index/
-```
+プロファイル/フォルダの組み合わせごとに独自のインデックスを持ちます。
 
 ## ライセンス
 

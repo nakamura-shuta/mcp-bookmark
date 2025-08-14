@@ -369,7 +369,7 @@ impl BookmarkReader {
         if self.config.profile_name.is_some() && self.config.target_folder.is_some() {
             return Ok(vec![]);
         }
-        
+
         let all_bookmarks = self.get_all_bookmarks()?;
         let query_lower = query.to_lowercase();
 
@@ -479,7 +479,7 @@ impl BookmarkReader {
             let path: Vec<String> = folder_name
                 .split('/')
                 .map(|s| s.to_string())
-                .filter(|s| !s.is_empty()) // 空の要素を除外
+                .filter(|s| !s.is_empty()) // Remove empty elements
                 .collect();
             tracing::info!("Parsing folder path '{}' as: {:?}", folder_name, path);
             tracing::debug!("Searching for folder path: {:?}", path);

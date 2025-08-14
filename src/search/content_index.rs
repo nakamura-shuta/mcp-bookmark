@@ -132,8 +132,9 @@ impl ContentIndexManager {
     /// Create new
     pub async fn new(reader: Arc<BookmarkReader>, fetcher: Arc<ContentFetcher>) -> Result<Self> {
         // Check if we're using pre-built index (from Chrome extension)
-        let using_prebuilt_index = reader.config.profile_name.is_some() && reader.config.target_folder.is_some();
-        
+        let using_prebuilt_index =
+            reader.config.profile_name.is_some() && reader.config.target_folder.is_some();
+
         let (bookmarks, total) = if using_prebuilt_index {
             // Don't read bookmarks when using pre-built index
             debug!("Using pre-built index, skipping bookmark file reading");
@@ -155,7 +156,10 @@ impl ContentIndexManager {
             // Check if we have indexed content already
             match search_manager.get_stats() {
                 Ok(stats) => {
-                    info!("Existing index found with {} documents", stats.num_documents);
+                    info!(
+                        "Existing index found with {} documents",
+                        stats.num_documents
+                    );
                     (stats.num_documents > 0, stats.num_documents)
                 }
                 Err(_) => (false, 0),
@@ -283,7 +287,7 @@ impl ContentIndexManager {
 
                     if completed == 1
                         || completed == total
-                        || (percentage / 10 != prev_percentage / 10) // 10%刻み
+                        || (percentage / 10 != prev_percentage / 10) // 10% increments
                         || (completed == 10 || completed == 50 || completed == 100)
                     // Milestone
                     {
@@ -315,8 +319,11 @@ impl ContentIndexManager {
 
     /// Execute search (using tantivy only)
     pub async fn search(&self, query: &str, limit: usize) -> Result<Vec<SearchResult>> {
-        info!("ContentIndexManager::search called with query: '{}', limit: {}", query, limit);
-        
+        info!(
+            "ContentIndexManager::search called with query: '{}', limit: {}",
+            query, limit
+        );
+
         // Search with tantivy
         let search = self.tantivy_search.lock().await;
         info!("Calling tantivy search...");

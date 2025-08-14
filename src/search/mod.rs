@@ -10,9 +10,9 @@ use tantivy::{Index, directory::MmapDirectory};
 use tracing::{debug, info};
 
 pub use content_index::ContentIndexManager;
-pub use searcher::{SearchParams, SearchResult};
 pub use indexer::BookmarkIndexer;
 pub use schema::BookmarkSchema;
+pub use searcher::{SearchParams, SearchResult};
 
 use crate::bookmark::FlatBookmark;
 use crate::config::Config;
