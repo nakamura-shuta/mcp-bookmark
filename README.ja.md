@@ -2,9 +2,14 @@
 
 # Chrome Bookmark MCP Server
 
-Chrome ブックマークを AI アシスタントから利用できるようにする MCP (Model Context Protocol) サーバー。全文検索機能付き。
+**ブックマークしたページの内容を AI で検索** - ログイン必須サイトも Chrome 拡張機能でインデックス化、高速全文検索を実現
 
-**⚠️ macOS と Chrome のみ対応**: 現在 macOS と Google Chrome のみサポートしています。
+💡 **主な特徴**:
+- 🔐 **認証が必要なページも OK** - Chrome 拡張機能がログイン済みブラウザから直接コンテンツを取得
+- ⚡ **高速ローカル検索** - Tantivy エンジンでインデックス化、外部 API 不要
+- 🎯 **AI が理解しやすい** - Claude がブックマークの内容を検索して質問に答える
+
+**⚠️ 動作環境**: macOS + Google Chrome
 
 ## 機能
 

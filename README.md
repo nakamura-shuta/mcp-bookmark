@@ -2,9 +2,14 @@
 
 # Chrome Bookmark MCP Server
 
-MCP (Model Context Protocol) server that provides AI assistants with access to your Chrome bookmarks with full-text search capabilities.
+**Search inside your bookmarked pages with AI** - Index even login-required sites with Chrome extension, enabling fast full-text search
 
-**⚠️ macOS and Chrome Only**: Currently supports only macOS and Google Chrome.
+💡 **Key Features**:
+- 🔐 **Works with authenticated pages** - Chrome extension fetches content from your logged-in browser
+- ⚡ **Fast local search** - Indexed with Tantivy engine, no external API calls
+- 🎯 **AI-friendly** - Claude can search bookmark contents to answer your questions
+
+**⚠️ Requirements**: macOS + Google Chrome
 
 ## Features
 
