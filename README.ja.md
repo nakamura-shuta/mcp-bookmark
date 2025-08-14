@@ -95,11 +95,11 @@ CHROME_PROFILE_NAME="Extension" CHROME_TARGET_FOLDER="Development" ./target/rele
 
 ## 利用可能な MCP ツール
 
-- `search_bookmarks` - タイトル/URL で検索
-- `search_bookmarks_fulltext` - 全文コンテンツ検索
+- `search_bookmarks_fulltext` - 全文コンテンツ検索（タイトル、URL、ページ内容を検索）
 - `get_bookmark_content` - 特定 URL のコンテンツ取得
 - `list_bookmark_folders` - 利用可能なフォルダ一覧
 - `get_indexing_status` - インデックス化の進捗確認
+- `get_available_profiles` - Chrome プロファイル一覧の取得
 
 ## インデックスの保存場所
 

@@ -95,11 +95,11 @@ CHROME_PROFILE_NAME="Extension" CHROME_TARGET_FOLDER="Development" ./target/rele
 
 ## MCP Tools Available
 
-- `search_bookmarks` - Search by title/URL
-- `search_bookmarks_fulltext` - Full-text content search
+- `search_bookmarks_fulltext` - Full-text content search (searches titles, URLs, and page content)
 - `get_bookmark_content` - Get content for specific URL
 - `list_bookmark_folders` - List available folders
 - `get_indexing_status` - Check indexing progress
+- `get_available_profiles` - List available Chrome profiles
 
 ## Index Storage
 
