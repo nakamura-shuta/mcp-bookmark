@@ -29,23 +29,31 @@ jobs:
           targets: ${{ matrix.target }}
       
       - name: Build
-        run: cargo build --release --target ${{ matrix.target }}
+        run: |
+          cargo build --release --target ${{ matrix.target }} --bin mcp-bookmark
+          cargo build --release --target ${{ matrix.target }} --bin mcp-bookmark-native
       
-      - name: Prepare binary
+      - name: Prepare binaries
         shell: bash
         run: |
+          # Prepare mcp-bookmark
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
             cp target/${{ matrix.target }}/release/mcp-bookmark.exe ${{ matrix.name }}
+            cp target/${{ matrix.target }}/release/mcp-bookmark-native.exe ${{ matrix.name }}-native
           else
             cp target/${{ matrix.target }}/release/mcp-bookmark ${{ matrix.name }}
+            cp target/${{ matrix.target }}/release/mcp-bookmark-native ${{ matrix.name }}-native
             chmod +x ${{ matrix.name }}
+            chmod +x ${{ matrix.name }}-native
           fi
       
-      - name: Upload artifact
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
-          path: ${{ matrix.name }}
+          path: |
+            ${{ matrix.name }}
+            ${{ matrix.name }}-native
 
   release:
     name: Create Release
@@ -69,42 +77,47 @@ jobs:
           prerelease: false
           generate_release_notes: true
           body: |
-            ## インストール方法
+            ## Installation
             
             ### macOS (Intel)
             ```bash
+            # Download both binaries
             curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/mcp-bookmark-darwin-x64 -o mcp-bookmark
-            chmod +x mcp-bookmark
-            sudo mv mcp-bookmark /usr/local/bin/
+            curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/mcp-bookmark-darwin-x64-native -o mcp-bookmark-native
+            chmod +x mcp-bookmark mcp-bookmark-native
             ```
             
             ### macOS (Apple Silicon)
             ```bash
+            # Download both binaries
             curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/mcp-bookmark-darwin-arm64 -o mcp-bookmark
-            chmod +x mcp-bookmark
-            sudo mv mcp-bookmark /usr/local/bin/
+            curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/mcp-bookmark-darwin-arm64-native -o mcp-bookmark-native
+            chmod +x mcp-bookmark mcp-bookmark-native
             ```
             
-            ## Claude設定
+            ## Quick Start
             
-            `~/.config/claude/config.json`:
+            ### 1. Install Chrome Extension
             
-            ```json
-            {
-              "mcpServers": {
-                "mcp-bookmark": {
-                  "command": "/usr/local/bin/mcp-bookmark",
-                  "env": {
-                    "CHROME_PROFILE_NAME": "Work",
-                    "CHROME_TARGET_FOLDER": "Development"
-                  }
-                }
-              }
-            }
+            The Chrome extension enables indexing of authenticated pages and content extraction from your logged-in browser.
+            
+            - Configure Native Messaging Host with `mcp-bookmark-native` binary
+            - See [Extension README](https://github.com/${{ github.repository }}/tree/main/bookmark-indexer-extension) for detailed setup
+            
+            ### 2. Run MCP Server
+            
+            ```bash
+            # Use with Chrome extension index
+            CHROME_PROFILE_NAME="Extension" CHROME_TARGET_FOLDER="YourFolderName" ./mcp-bookmark
             ```
             
-            **注意**: 
-            - このツールは現在macOS専用です
-            - `CHROME_PROFILE_NAME`にはChromeの表示名を使用してください（"Default"などのディレクトリ名ではありません）
+            **Features**: 
+            - 🔐 Works with authenticated pages
+            - ⚡ Fast local search with Tantivy
+            - 🎯 AI-friendly for Claude
+            
+            **Requirements**: macOS + Google Chrome
+            
+            See [full documentation](https://github.com/${{ github.repository }}) for configuration details.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
