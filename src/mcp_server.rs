@@ -16,25 +16,25 @@ use crate::search::{ContentIndexManager, SearchParams};
 // Tool request/response types
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct SearchBookmarksRequest {
-    #[schemars(description = "Search query for bookmark title or URL")]
+    #[schemars(description = "Search query to match against bookmark titles and URLs (metadata only, no content search)")]
     pub query: String,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct FullTextSearchRequest {
-    #[schemars(description = "Search query for full-text search")]
+    #[schemars(description = "Search query to find within indexed page contents extracted from bookmarked websites")]
     pub query: String,
-    #[schemars(description = "Optional folder filter")]
+    #[schemars(description = "Filter results to specific bookmark folder (optional)")]
     pub folder: Option<String>,
-    #[schemars(description = "Optional domain filter")]
+    #[schemars(description = "Filter results to specific domain (e.g., 'github.com') (optional)")]
     pub domain: Option<String>,
-    #[schemars(description = "Maximum number of results (default: 20)")]
+    #[schemars(description = "Maximum number of search results to return (default: 20)")]
     pub limit: Option<usize>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct GetBookmarkContentRequest {
-    #[schemars(description = "URL of the bookmark to fetch content from")]
+    #[schemars(description = "Exact URL of the bookmark to retrieve full indexed page content from the local Tantivy search index")]
     pub url: String,
 }
 
@@ -62,7 +62,7 @@ impl BookmarkServer {
         resource.no_annotation()
     }
 
-    #[tool(description = "Search bookmarks by title or URL")]
+    #[tool(description = "Search Chrome bookmarks by matching title or URL (metadata only, fast search without content)")]
     fn search_bookmarks(
         &self,
         Parameters(req): Parameters<SearchBookmarksRequest>,
@@ -79,7 +79,7 @@ impl BookmarkServer {
         }
     }
 
-    #[tool(description = "List all bookmark folders")]
+    #[tool(description = "List all available Chrome bookmark folders in the current profile")]
     fn list_bookmark_folders(&self) -> Result<CallToolResult, McpError> {
         match self.reader.list_filtered_folders() {
             Ok(folders) => {
@@ -93,7 +93,7 @@ impl BookmarkServer {
         }
     }
 
-    #[tool(description = "Full-text search through bookmarks including page content")]
+    #[tool(description = "Search through indexed webpage contents extracted from bookmarked sites using Tantivy full-text search engine")]
     async fn search_bookmarks_fulltext(
         &self,
         Parameters(req): Parameters<FullTextSearchRequest>,
@@ -147,7 +147,7 @@ impl BookmarkServer {
         }
     }
 
-    #[tool(description = "Get indexing status")]
+    #[tool(description = "Get the current status of the bookmark content indexing process and check if indexing is complete")]
     fn get_indexing_status(&self) -> Result<CallToolResult, McpError> {
         let status = self.search_manager.get_indexing_status();
         let is_complete = self.search_manager.is_indexing_complete();
@@ -162,7 +162,7 @@ impl BookmarkServer {
         Ok(CallToolResult::success(vec![Content::text(content)]))
     }
 
-    #[tool(description = "Get list of available Chrome profiles")]
+    #[tool(description = "List all available Chrome user profiles with bookmark counts and sizes")]
     fn get_available_profiles(&self) -> Result<CallToolResult, McpError> {
         use crate::chrome_profile::ProfileResolver;
 
@@ -208,7 +208,7 @@ impl BookmarkServer {
         }
     }
 
-    #[tool(description = "Get full content of a bookmark from index or fetch if needed")]
+    #[tool(description = "Retrieve complete indexed webpage content for a specific bookmark URL from the local Tantivy search index")]
     async fn get_bookmark_content(
         &self,
         Parameters(req): Parameters<GetBookmarkContentRequest>,
@@ -273,7 +273,7 @@ impl ServerHandler for BookmarkServer {
                 name: "mcp-bookmark".to_string(),
                 version: "0.1.0".to_string(),
             },
-            instructions: Some("Chrome bookmark MCP server provides access to your Chrome bookmarks. You can search bookmarks, list folders, and fetch content from bookmark URLs.".to_string()),
+            instructions: Some("Chrome bookmark MCP server provides access to indexed content from your Chrome bookmarks. Use 'search_bookmarks' for quick title/URL searches, 'search_bookmarks_fulltext' to search within indexed webpage contents, and 'get_bookmark_content' to retrieve full indexed content for specific URLs. All content is pre-indexed locally using Tantivy search engine via Chrome extension.".to_string()),
         }
     }
 

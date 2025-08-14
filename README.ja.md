@@ -38,9 +38,16 @@ Chrome 拡張機能でより良いコンテンツインデックスを実現：
 
 2. 拡張機能をインストール - [拡張機能 README](bookmark-indexer-extension/README.md) 参照
 
+3. インデックスの確認：
+   ```bash
+   # 作成されたインデックス一覧を確認
+   ./target/release/mcp-bookmark --list-indexes
+   # 例: Extension_Development (123 documents, 5.2MB)
+   ```
+
 ### 3. MCP の設定
 
-Claude Desktop の設定に追加：
+Claude Desktop の設定ファイル (`~/Library/Application Support/Claude/claude_desktop_config.json`) に追加：
 
 ```json
 {
@@ -55,6 +62,11 @@ Claude Desktop の設定に追加：
   }
 }
 ```
+
+**重要**：
+- `/path/to/mcp-bookmark` を実際のプロジェクトパスに置き換えてください
+- `your-folder-name` を Chrome 拡張機能でインデックス化したフォルダ名に置き換えてください
+- `CHROME_PROFILE_NAME` は Chrome 拡張機能使用時は常に `"Extension"` にしてください
 
 ## 使い方
 

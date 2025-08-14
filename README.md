@@ -38,9 +38,16 @@ The Chrome extension provides better content indexing:
 
 2. Install the extension - see [Extension README](bookmark-indexer-extension/README.md)
 
+3. Verify index creation:
+   ```bash
+   # List all created indexes
+   ./target/release/mcp-bookmark --list-indexes
+   # Example: Extension_Development (123 documents, 5.2MB)
+   ```
+
 ### 3. Configure MCP
 
-Add to your Claude Desktop config:
+Add to your Claude Desktop config file (`~/Library/Application Support/Claude/claude_desktop_config.json`):
 
 ```json
 {
@@ -55,6 +62,11 @@ Add to your Claude Desktop config:
   }
 }
 ```
+
+**Important**:
+- Replace `/path/to/mcp-bookmark` with your actual project path
+- Replace `your-folder-name` with the exact folder name you indexed with the Chrome extension
+- `CHROME_PROFILE_NAME` should always be `"Extension"` when using the Chrome extension
 
 ## Usage
 
