@@ -2,21 +2,59 @@
 
 # Chrome Bookmark MCP Server
 
-MCP (Model Context Protocol) server providing access to Chrome bookmarks
+**⚠️ macOS and Chrome Only**: This tool currently supports only macOS and Google Chrome.
+
+MCP (Model Context Protocol) server providing AI assistants with access to your Chrome bookmarks with full-text search capabilities.
 
 ## Features
 
-- **Fast Full-Text Search**: Bookmark content search powered by tantivy search engine (with snippets in results)
-- **Content Caching**: Direct content retrieval from index DB (no remote fetching required)
-- **Auto-Indexing**: Automatic background fetching and storing of web page content
-- **Profile Support**: Select from multiple Chrome profiles
-- **Folder Filtering**: Expose only specific folder bookmarks
-- **Independent Index Management**: Separate indexes per profile/folder combination
+- **Full-Text Search**: Search bookmark content using the tantivy search engine
+- **Chrome Profile Support**: Works with multiple Chrome profiles
+- **Folder Filtering**: Expose only specific bookmark folders
+- **Auto-indexing**: Background indexing of web page content
+- **Chrome Extension**: Optional extension for enhanced content indexing
 
-## Quick Start (Easiest Way)
+## Requirements
 
-For other projects, simply use the absolute path in your `.mcp.json`:
+- macOS
+- Google Chrome
+- Rust 1.70+ (for building from source)
 
+## Installation
+
+### Build from Source
+
+```bash
+# Clone the repository
+git clone https://github.com/USERNAME/mcp-bookmark.git
+cd mcp-bookmark
+
+# Build the release binary
+cargo build --release
+
+# Test the build
+./target/release/mcp-bookmark --help
+```
+
+## Configuration
+
+### Basic Setup
+
+Create a `.mcp.json` file in your project root:
+
+```json
+{
+  "mcpServers": {
+    "mcp-bookmark": {
+      "command": "/path/to/mcp-bookmark/target/release/mcp-bookmark"
+    }
+  }
+}
+```
+
+### Advanced Options
+
+#### Specific Folder
 ```json
 {
   "mcpServers": {
@@ -30,277 +68,111 @@ For other projects, simply use the absolute path in your `.mcp.json`:
 }
 ```
 
-**No installation required!** Just build once and reference the binary path.
-
-## Installation
-
-### Option 1: Download Pre-built Binary
-
-#### macOS (Apple Silicon)
-
-```bash
-curl -L https://github.com/USERNAME/mcp-bookmark/releases/latest/download/mcp-bookmark-darwin-arm64 -o mcp-bookmark
-chmod +x mcp-bookmark
-sudo mv mcp-bookmark /usr/local/bin/
-```
-
-#### macOS (Intel)
-
-```bash
-curl -L https://github.com/USERNAME/mcp-bookmark/releases/latest/download/mcp-bookmark-darwin-x64 -o mcp-bookmark
-chmod +x mcp-bookmark
-sudo mv mcp-bookmark /usr/local/bin/
-```
-
-### Option 2: Build from Source
-
-```bash
-# Clone the repository
-git clone https://github.com/USERNAME/mcp-bookmark.git
-cd mcp-bookmark
-
-# Build the release binary
-cargo build --release
-
-# The binary will be available at:
-# $(pwd)/target/release/mcp-bookmark
-```
-
-### Verify Build
-
-```bash
-# Test the binary
-./target/release/mcp-bookmark --help
-```
-
-## Configuration
-
-### Basic Configuration
-
-`~/.config/claude/config.json`:
-
+#### Chrome Profile
 ```json
 {
   "mcpServers": {
     "mcp-bookmark": {
-      "command": "/full/path/to/mcp-bookmark/target/release/mcp-bookmark"
-    }
-  }
-}
-```
-
-### Project-Specific Configuration
-
-Place `.mcp.json` in your project root directory to enable project-specific MCP configuration.
-
-`.mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "mcp-bookmark": {
-      "command": "/full/path/to/mcp-bookmark/target/release/mcp-bookmark",
-      "args": ["Development", "100"]
-    }
-  }
-}
-```
-
-This allows different bookmark folders and settings per project.
-
-### Expose Specific Folder Only
-
-```json
-{
-  "mcpServers": {
-    "mcp-bookmark": {
-      "command": "/full/path/to/mcp-bookmark/target/release/mcp-bookmark",
-      "args": ["Development", "100"]
-    }
-  }
-}
-```
-
-### Subfolder Specification
-
-Use slash (`/`) to specify subfolders:
-
-```json
-{
-  "mcpServers": {
-    "mcp-bookmark": {
-      "command": "/full/path/to/mcp-bookmark/target/release/mcp-bookmark",
+      "command": "/path/to/mcp-bookmark/target/release/mcp-bookmark",
       "env": {
-        "CHROME_TARGET_FOLDER": "Development/React"
+        "CHROME_PROFILE_NAME": "Work"
       }
     }
   }
 }
 ```
 
-This feature allows exposing only specific nested subfolders.
-
-### Profile Specification
-
-You can specify which Chrome profile to use by setting the `CHROME_PROFILE_NAME` environment variable. The profile name should be the display name shown in Chrome, not the internal directory name.
-
-```json
-{
-  "mcpServers": {
-    "mcp-bookmark": {
-      "command": "/full/path/to/mcp-bookmark/target/release/mcp-bookmark",
-      "env": {
-        "CHROME_PROFILE_NAME": "Work"  // Use display name, not directory name like "Default"
-      }
-    }
-  }
-}
-```
-
-To check available profiles, use the MCP tool or run:
-```bash
-mcp-bookmark --list-profiles
-```
-
-**Note**: If `CHROME_PROFILE_NAME` is not specified, the server will auto-detect and use the profile with the largest bookmarks file.
+Note: Use the display name shown in Chrome (e.g., "Work", "Personal"), not internal directory names.
 
 ## Usage
 
 ### Command Line
 
 ```bash
+# Basic usage
 mcp-bookmark                        # All bookmarks
-mcp-bookmark Development            # Development folder only
-mcp-bookmark Development 100        # Max 100 items
-mcp-bookmark Work,Tech              # Multiple folders
+mcp-bookmark Development            # Specific folder
+mcp-bookmark Development 10         # Max 10 from Development
 
-mcp-bookmark --profile Work         # Work profile
-mcp-bookmark --folder Development   # Specific folder
-mcp-bookmark --exclude Archive      # Exclude folder
+# Profile and folder options
+mcp-bookmark --profile Work --folder Development
 
 # Index management
 mcp-bookmark --list-indexes         # List indexes
-mcp-bookmark --clear-index          # Clear current config index
+mcp-bookmark --clear-index          # Clear index for current config
+mcp-bookmark --clear-index Work_Tech  # Clear specific index
 mcp-bookmark --clear-all-indexes    # Clear all indexes
 ```
 
-### Available Tools (for MCP Clients)
+### Available MCP Tools
 
-1. **search_bookmarks** - Search bookmarks by title or URL
-2. **search_bookmarks_fulltext** - Full-text search (including content, with snippets in results)
-3. **get_bookmark_content** - Get full content from URL (from index DB)
-4. **list_bookmark_folders** - Get list of bookmark folders
-5. **get_indexing_status** - Check indexing status
-6. **get_available_profiles** - Get list of available Chrome profiles
+1. **search_bookmarks** - Search by title or URL
+2. **search_bookmarks_fulltext** - Full-text content search
+3. **get_bookmark_content** - Retrieve full page content
+4. **list_bookmark_folders** - List available folders
+5. **get_available_profiles** - List Chrome profiles
 
-### Usage Examples with AI Assistant
+### Usage with AI Assistant
 
 ```
 "Search bookmarks in Development folder"
-"Find React-related documentation"
+"Find React documentation"
 "Show recently added bookmarks"
-"Tell me more about the content of this URL" (retrieves full text with get_bookmark_content)
 ```
 
-## Index Management
+## Chrome Extension (Optional)
 
-Search indexes are managed independently for each profile and folder combination:
+The extension enhances content indexing by fetching web page content directly from Chrome.
 
-```
-~/Library/Application Support/mcp-bookmark/
-├── Default_Development/      # Default profile, Development folder
-├── Work_Tech_React/         # Work profile, Tech/React folder
-└── Personal_all/            # Personal profile, all bookmarks
-```
+### Installation Steps
 
-### Features
-
-- **Isolated Management**: Projects with same profile/folder settings share the same index
-- **Auto-Creation**: Index created automatically on first launch
-- **Background Updates**: Content indexed progressively after server starts
-
-### Management Commands
-
+1. **Build Native Host**:
 ```bash
-# List indexes (shows size and update time)
-mcp-bookmark --list-indexes
-
-# Clear specific index
-mcp-bookmark --clear-index Default_Development
-
-# Clear all indexes
-mcp-bookmark --clear-all-indexes
+cargo build --release --bin mcp-bookmark-native
 ```
 
-## Using in Other Projects
-
-Create a `.mcp.json` file in your project root with the full path to the binary:
-
-```json
-{
-  "mcpServers": {
-    "mcp-bookmark": {
-      "command": "/full/path/to/mcp-bookmark/target/release/mcp-bookmark",
-      "env": {
-        "RUST_LOG": "info",
-        "CHROME_PROFILE_NAME": "Work",  // Use display name (e.g., "Work", "Personal")
-        "CHROME_TARGET_FOLDER": "YourProjectFolder"
-      }
-    }
-  }
-}
-```
-
-**Note**: 
-- `CHROME_PROFILE_NAME` should be the display name shown in Chrome (e.g., "Work", "Personal"), not the internal directory name (e.g., "Default", "Profile 1")
-- Adjust `CHROME_TARGET_FOLDER` to match your project's bookmark folder
-- If `CHROME_PROFILE_NAME` is omitted, the server will auto-detect the profile with the largest bookmarks file
-
-## Troubleshooting
-
-### Common Issues
-
-#### "Connection failed: MCP error -32000"
-
-This error typically means the binary path is incorrect or the binary doesn't exist.
-
-**Solution**:
-1. Ensure the binary is built: `cargo build --release`
-2. Verify the full path to the binary is correct
-3. Ensure your `.mcp.json` uses the full absolute path to the binary
-
-### Check Chrome Profiles
-
+2. **Configure Native Messaging** (run from project root):
 ```bash
-# List profiles
-ls ~/Library/Application\ Support/Google/Chrome/*/Bookmarks
-
-# Check profile path at chrome://version/
-```
-
-### Log Files
-
-```
-~/Library/Application Support/mcp-bookmark/logs/
-```
-
-Change log level:
-
-```json
+# Run this from the project root directory
+cat > ~/Library/Application\ Support/Google/Chrome/NativeMessagingHosts/com.mcp_bookmark.json << EOF
 {
-  "mcpServers": {
-    "mcp-bookmark": {
-      "command": "/full/path/to/mcp-bookmark/target/release/mcp-bookmark",
-      "env": { "RUST_LOG": "debug" }
-    }
-  }
+  "name": "com.mcp_bookmark",
+  "description": "Bookmark Indexer Native Host",
+  "path": "$(pwd)/target/release/mcp-bookmark-native",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://YOUR_EXTENSION_ID/"
+  ]
 }
+EOF
 ```
 
-## Search Index
+3. **Install Extension**:
+   - Open `chrome://extensions/`
+   - Enable "Developer mode"
+   - Click "Load unpacked"
+   - Select `bookmark-indexer-extension` folder
+   - Note the Extension ID
 
-The index is built automatically and stored at:
+4. **Update Configuration**:
+```bash
+# Replace with your actual extension ID
+EXTENSION_ID="your-extension-id"
+sed -i "" "s/YOUR_EXTENSION_ID/$EXTENSION_ID/g" \
+  ~/Library/Application\ Support/Google/Chrome/NativeMessagingHosts/com.mcp_bookmark.json
+```
 
+5. **Restart Chrome completely**
+
+### Extension Usage
+
+- Click extension icon in toolbar
+- Select bookmark folder
+- Click "Index Selected Folder"
+
+## Index Location
+
+Indexes are stored at:
 ```
 ~/Library/Application Support/mcp-bookmark/index/
 ```

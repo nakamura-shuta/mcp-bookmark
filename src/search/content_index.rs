@@ -40,6 +40,12 @@ pub struct IndexingStatus {
 
     /// Start time
     pub started_at: std::time::Instant,
+
+    /// Using pre-built index from Chrome extension
+    pub using_prebuilt: bool,
+
+    /// Number of documents in pre-built index
+    pub prebuilt_doc_count: usize,
 }
 
 impl IndexingStatus {
@@ -50,6 +56,21 @@ impl IndexingStatus {
             errors: AtomicUsize::new(0),
             is_complete: AtomicBool::new(false),
             started_at: std::time::Instant::now(),
+            using_prebuilt: false,
+            prebuilt_doc_count: 0,
+        }
+    }
+
+    /// Create for pre-built index
+    pub fn for_prebuilt(doc_count: usize) -> Self {
+        Self {
+            total: AtomicUsize::new(0),
+            completed: AtomicUsize::new(0),
+            errors: AtomicUsize::new(0),
+            is_complete: AtomicBool::new(true),
+            started_at: std::time::Instant::now(),
+            using_prebuilt: true,
+            prebuilt_doc_count: doc_count,
         }
     }
 
@@ -65,6 +86,14 @@ impl IndexingStatus {
 
     /// Generate status string
     pub fn status_string(&self) -> String {
+        // Special message for pre-built index
+        if self.using_prebuilt {
+            return format!(
+                "✅ Chrome Extension index loaded: {} documents ready",
+                self.prebuilt_doc_count
+            );
+        }
+
         let total = self.total.load(Ordering::Relaxed);
         let completed = self.completed.load(Ordering::Relaxed);
         let errors = self.errors.load(Ordering::Relaxed);
@@ -102,28 +131,66 @@ impl IndexingStatus {
 impl ContentIndexManager {
     /// Create new
     pub async fn new(reader: Arc<BookmarkReader>, fetcher: Arc<ContentFetcher>) -> Result<Self> {
-        // Get bookmarks
-        let bookmarks = reader.get_all_bookmarks()?;
-        let total = bookmarks.len();
-
-        debug!("Initializing search manager ({} bookmarks)", total);
+        // Check if we're using pre-built index (from Chrome extension)
+        let using_prebuilt_index = reader.config.profile_name.is_some() && reader.config.target_folder.is_some();
+        
+        let (bookmarks, total) = if using_prebuilt_index {
+            // Don't read bookmarks when using pre-built index
+            debug!("Using pre-built index, skipping bookmark file reading");
+            (vec![], 0)
+        } else {
+            // Get bookmarks for normal operation
+            let bookmarks = reader.get_all_bookmarks()?;
+            let total = bookmarks.len();
+            debug!("Initializing search manager ({} bookmarks)", total);
+            (bookmarks, total)
+        };
 
         // Create SearchManager - using config
         let mut search_manager = SearchManager::new_with_config(&reader.config)?;
 
-        // Index only metadata immediately
-        debug!("Indexing metadata...");
-        search_manager.build_index(&bookmarks)?;
+        // Check if index already exists with content
+        let index_exists = search_manager.index_exists();
+        let (has_content, doc_count) = if index_exists {
+            // Check if we have indexed content already
+            match search_manager.get_stats() {
+                Ok(stats) => {
+                    info!("Existing index found with {} documents", stats.num_documents);
+                    (stats.num_documents > 0, stats.num_documents)
+                }
+                Err(_) => (false, 0),
+            }
+        } else {
+            (false, 0)
+        };
+
+        // Only rebuild if index is empty or doesn't exist (and we have bookmarks)
+        if !has_content && !bookmarks.is_empty() {
+            debug!("Building new index with metadata...");
+            search_manager.build_index(&bookmarks)?;
+        } else if has_content {
+            debug!("Using existing index, skipping rebuild");
+        }
+
+        // Create appropriate IndexingStatus based on whether we're using pre-built index
+        let indexing_status = if using_prebuilt_index {
+            Arc::new(IndexingStatus::for_prebuilt(doc_count))
+        } else {
+            Arc::new(IndexingStatus::new(total))
+        };
 
         // Create manager
         let manager = Self {
             tantivy_search: Arc::new(Mutex::new(search_manager)),
             content_fetcher: fetcher,
-            indexing_status: Arc::new(IndexingStatus::new(total)),
+            indexing_status,
         };
 
-        // Start fetching content in background
-        manager.start_background_indexing(bookmarks).await;
+        // Start fetching content in background (only if we have bookmarks)
+        if !bookmarks.is_empty() {
+            manager.start_background_indexing(bookmarks).await;
+        }
+        // Note: For pre-built index, is_complete is already set to true in IndexingStatus::for_prebuilt()
 
         Ok(manager)
     }
@@ -248,9 +315,13 @@ impl ContentIndexManager {
 
     /// Execute search (using tantivy only)
     pub async fn search(&self, query: &str, limit: usize) -> Result<Vec<SearchResult>> {
+        info!("ContentIndexManager::search called with query: '{}', limit: {}", query, limit);
+        
         // Search with tantivy
         let search = self.tantivy_search.lock().await;
+        info!("Calling tantivy search...");
         let results = search.search(query, limit)?;
+        info!("Tantivy search returned {} results", results.len());
 
         // Provide information if few results during indexing
         if results.is_empty() && !self.indexing_status.is_complete.load(Ordering::Relaxed) {
@@ -282,37 +353,23 @@ impl ContentIndexManager {
         self.indexing_status.is_complete.load(Ordering::Relaxed)
     }
 
-    /// Get full content from URL (from index, or fetch if not found)
+    /// Get full content from URL (from index only)
     pub async fn get_content_by_url(&self, url: &str) -> Result<Option<String>> {
-        // First try to get content directly from index
+        // Get content directly from index only
         let search = self.tantivy_search.lock().await;
 
         // Get full content from index
-        if let Ok(Some(content)) = search.get_content_by_url(url) {
-            info!("Content fetched from index successfully: {}", url);
-            return Ok(Some(content));
-        }
-
-        drop(search);
-
-        // Fetch new if not in index (e.g., not original bookmark URL)
-        info!("Fetching new content from URL: {}", url);
-        match timeout(
-            Duration::from_secs(10),
-            self.content_fetcher.fetch_page(url),
-        )
-        .await
-        {
-            Ok(Ok(html)) => {
-                let content = self.content_fetcher.extract_content(&html, url);
-                Ok(content.text_content)
+        match search.get_content_by_url(url) {
+            Ok(Some(content)) => {
+                info!("Content fetched from index successfully: {}", url);
+                Ok(Some(content))
             }
-            Ok(Err(e)) => {
-                warn!("Content fetch failed: {}: {}", url, e);
+            Ok(None) => {
+                info!("Content not found in index for URL: {}", url);
                 Ok(None)
             }
-            Err(_) => {
-                warn!("Timeout: {}", url);
+            Err(e) => {
+                warn!("Error fetching content from index for {}: {}", url, e);
                 Ok(None)
             }
         }

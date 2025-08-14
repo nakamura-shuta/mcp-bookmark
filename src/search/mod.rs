@@ -11,11 +11,11 @@ use tracing::{debug, info};
 
 pub use content_index::ContentIndexManager;
 pub use searcher::{SearchParams, SearchResult};
+pub use indexer::BookmarkIndexer;
+pub use schema::BookmarkSchema;
 
 use crate::bookmark::FlatBookmark;
 use crate::config::Config;
-use indexer::BookmarkIndexer;
-use schema::BookmarkSchema;
 use searcher::BookmarkSearcher;
 
 /// Index metadata

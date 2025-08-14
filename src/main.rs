@@ -156,8 +156,14 @@ fn list_indexes() {
 
                     // Show size
                     if let Ok(size) = get_dir_size(&path) {
-                        let size_mb = size as f64 / 1024.0 / 1024.0;
-                        print!(" [{:.1}MB]", size_mb);
+                        let (size_str, unit) = if size < 1024 {
+                            (size as f64, "B")
+                        } else if size < 1024 * 1024 {
+                            (size as f64 / 1024.0, "KB")
+                        } else {
+                            (size as f64 / 1024.0 / 1024.0, "MB")
+                        };
+                        print!(" [{:.1}{}]", size_str, unit);
                     }
 
                     println!();
@@ -340,7 +346,7 @@ async fn main() -> Result<()> {
     let search_manager = Arc::new(search_manager);
 
     tracing::info!("Server ready");
-    tracing::debug!("{}", search_manager.get_indexing_status());
+    tracing::info!("{}", search_manager.get_indexing_status());
 
     let server = BookmarkServer::new(reader, search_manager);
 

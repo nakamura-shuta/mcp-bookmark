@@ -176,7 +176,7 @@ impl BookmarkSearcher {
     pub fn get_full_content_by_url(&self, url: &str) -> Result<Option<String>> {
         let searcher = self.reader.searcher();
 
-        // Exact match search on URL field
+        // Exact match search on URL field (now STRING field)
         let term = Term::from_field_text(self.schema.url, url);
         let query = TermQuery::new(term, tantivy::schema::IndexRecordOption::Basic);
 

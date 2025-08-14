@@ -22,14 +22,14 @@ impl BookmarkSchema {
         // Unique identifier (stored, not indexed for exact retrieval)
         let id = builder.add_text_field("id", STRING | STORED);
 
-        // URL field (stored and indexed)
-        let url = builder.add_text_field("url", TEXT | STORED);
+        // URL field (stored as string for exact match)
+        let url = builder.add_text_field("url", STRING | STORED);
 
         // Title field (stored and indexed with higher weight)
         let title = builder.add_text_field("title", TEXT | STORED);
 
-        // Content field (indexed but not stored to save space)
-        let content = builder.add_text_field("content", TEXT);
+        // Content field (indexed and stored for full-text search and retrieval)
+        let content = builder.add_text_field("content", TEXT | STORED);
 
         // Folder path for filtering (stored as string)
         let folder_path = builder.add_text_field("folder_path", STRING | STORED);
@@ -58,7 +58,8 @@ impl BookmarkSchema {
 
     /// Get fields for text search
     pub fn text_fields(&self) -> Vec<Field> {
-        vec![self.title, self.url, self.content]
+        // URL is now STRING field, so only search in title and content
+        vec![self.title, self.content]
     }
 }
 
@@ -92,9 +93,8 @@ mod tests {
         let schema = BookmarkSchema::new();
         let text_fields = schema.text_fields();
 
-        assert_eq!(text_fields.len(), 3);
+        assert_eq!(text_fields.len(), 2);
         assert!(text_fields.contains(&schema.title));
-        assert!(text_fields.contains(&schema.url));
         assert!(text_fields.contains(&schema.content));
     }
 }

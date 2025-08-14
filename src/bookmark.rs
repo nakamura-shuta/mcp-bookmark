@@ -162,18 +162,18 @@ pub struct BookmarkReader {
 
 impl BookmarkReader {
     pub fn with_config(config: Config) -> Result<Self> {
-        // Use profile name if specified
-        let bookmarks_path = if let Some(profile_name) = &config.profile_name {
-            let resolver = crate::chrome_profile::ProfileResolver::new()?;
-            let profile = resolver.resolve_by_name(profile_name)?;
-            let path = resolver.get_bookmarks_path(&profile);
+        // Simply use a dummy path when profile/folder are specified via env vars
+        // The actual data comes from the pre-built index, not from Chrome bookmarks
+        let bookmarks_path = if config.profile_name.is_some() && config.target_folder.is_some() {
+            // When using environment variables, don't read Chrome bookmarks
             tracing::debug!(
-                "Using specified profile '{}' ({})",
-                profile.display_name,
-                profile.directory_name
+                "Using pre-built index for profile: {}, folder: {}",
+                config.profile_name.as_deref().unwrap_or(""),
+                config.target_folder.as_deref().unwrap_or("")
             );
-            path
+            PathBuf::from("/nonexistent/Bookmarks")
         } else {
+            // Auto-detect Chrome bookmarks path for normal usage
             Self::find_bookmarks_path()?
         };
 
@@ -323,6 +323,10 @@ impl BookmarkReader {
     }
 
     pub fn get_all_bookmarks(&self) -> Result<Vec<FlatBookmark>> {
+        // Return empty when using pre-built index
+        if self.config.profile_name.is_some() && self.config.target_folder.is_some() {
+            return Ok(vec![]);
+        }
         // If target_folder is specified, get only that specific folder
         if let Some(target_folder) = &self.config.target_folder {
             tracing::info!("Fetching bookmarks from target folder: {}", target_folder);
@@ -361,6 +365,11 @@ impl BookmarkReader {
     }
 
     pub fn search_bookmarks(&self, query: &str) -> Result<Vec<FlatBookmark>> {
+        // Return empty when using pre-built index
+        if self.config.profile_name.is_some() && self.config.target_folder.is_some() {
+            return Ok(vec![]);
+        }
+        
         let all_bookmarks = self.get_all_bookmarks()?;
         let query_lower = query.to_lowercase();
 
