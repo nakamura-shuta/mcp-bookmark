@@ -24,7 +24,7 @@
 
 ```bash
 # Clone and build
-git clone https://github.com/USERNAME/mcp-bookmark.git
+git clone https://github.com/nakamura-shuta/mcp-bookmark.git
 cd mcp-bookmark
 cargo build --release
 
