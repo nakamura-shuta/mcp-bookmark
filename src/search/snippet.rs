@@ -10,9 +10,9 @@ pub struct SnippetGenerator {
 impl SnippetGenerator {
     pub fn new() -> Self {
         Self {
-            max_snippet_length: 300,  // Maximum characters per snippet
-            max_snippets: 3,           // Maximum number of snippets to return
-            context_window: 50,        // Characters before/after match
+            max_snippet_length: 300, // Maximum characters per snippet
+            max_snippets: 3,         // Maximum number of snippets to return
+            context_window: 50,      // Characters before/after match
         }
     }
 
@@ -31,7 +31,7 @@ impl SnippetGenerator {
 
         // Find all positions where query terms appear
         let mut match_positions = self.find_match_positions(content, &query_terms);
-        
+
         if match_positions.is_empty() {
             // If no matches, return the beginning of content
             return vec![self.extract_sentence_aware_snippet(content, 0, self.max_snippet_length)];
@@ -52,8 +52,10 @@ impl SnippetGenerator {
 
             let snippet = self.extract_snippet_around_position(content, *pos, &query_terms);
             if !snippet.is_empty() {
-                let range = (pos.saturating_sub(self.context_window), 
-                             min(pos + self.context_window, content.len()));
+                let range = (
+                    pos.saturating_sub(self.context_window),
+                    min(pos + self.context_window, content.len()),
+                );
                 used_ranges.push(range);
                 snippets.push(snippet);
             }
@@ -96,9 +98,9 @@ impl SnippetGenerator {
             while end_byte < content.len() && !content.is_char_boundary(end_byte) {
                 end_byte += 1;
             }
-            
+
             let window_text = &content_lower[start_byte..end_byte];
-            
+
             let mut score = 0.0;
             let mut match_found = false;
 
@@ -121,11 +123,17 @@ impl SnippetGenerator {
     }
 
     /// Extract a snippet around a specific position
-    fn extract_snippet_around_position(&self, content: &str, position: usize, query_terms: &[String]) -> String {
+    fn extract_snippet_around_position(
+        &self,
+        content: &str,
+        position: usize,
+        query_terms: &[String],
+    ) -> String {
         // Find sentence boundaries around the position
         let start = self.find_sentence_start(content, position.saturating_sub(self.context_window));
-        let end = self.find_sentence_end(content, min(position + self.context_window, content.len()));
-        
+        let end =
+            self.find_sentence_end(content, min(position + self.context_window, content.len()));
+
         // Ensure start and end are at valid UTF-8 boundaries
         let mut start_byte = start;
         while start_byte < content.len() && !content.is_char_boundary(start_byte) {
@@ -135,10 +143,10 @@ impl SnippetGenerator {
         while end_byte > start_byte && !content.is_char_boundary(end_byte) {
             end_byte -= 1;
         }
-        
+
         // Extract the snippet
         let mut snippet = content[start_byte..end_byte].trim().to_string();
-        
+
         // Add ellipsis if needed
         if start_byte > 0 {
             snippet = format!("...{}", snippet);
@@ -149,36 +157,41 @@ impl SnippetGenerator {
 
         // Highlight query terms (optional, for better visibility)
         snippet = self.highlight_terms(&snippet, query_terms);
-        
+
         snippet
     }
 
     /// Extract a sentence-aware snippet from a specific position
-    fn extract_sentence_aware_snippet(&self, content: &str, start: usize, max_length: usize) -> String {
+    fn extract_sentence_aware_snippet(
+        &self,
+        content: &str,
+        start: usize,
+        max_length: usize,
+    ) -> String {
         // Ensure start is at a valid UTF-8 boundary
         let mut start_byte = start;
         while start_byte < content.len() && !content.is_char_boundary(start_byte) {
             start_byte += 1;
         }
-        
+
         let end = min(start_byte + max_length, content.len());
         let sentence_end = self.find_sentence_end(content, end);
-        
+
         // Ensure sentence_end is at a valid UTF-8 boundary
         let mut end_byte = sentence_end;
         while end_byte > start_byte && !content.is_char_boundary(end_byte) {
             end_byte -= 1;
         }
-        
+
         let mut snippet = content[start_byte..end_byte].trim().to_string();
-        
+
         if start_byte > 0 {
             snippet = format!("...{}", snippet);
         }
         if end_byte < content.len() {
             snippet = format!("{}...", snippet);
         }
-        
+
         snippet
     }
 
@@ -196,19 +209,20 @@ impl SnippetGenerator {
             if pos >= 2 {
                 let prev_char = bytes[pos - 1];
                 let prev_prev_char = bytes[pos - 2];
-                
+
                 // Check for sentence endings (. ! ?)
-                if (prev_prev_char == b'.' || prev_prev_char == b'!' || prev_prev_char == b'?') 
-                    && prev_char == b' ' {
+                if (prev_prev_char == b'.' || prev_prev_char == b'!' || prev_prev_char == b'?')
+                    && prev_char == b' '
+                {
                     return pos;
                 }
             }
-            
+
             // Also check for paragraph boundaries
             if pos >= 1 && bytes[pos - 1] == b'\n' {
                 return pos;
             }
-            
+
             pos = pos.saturating_sub(1);
         }
 
@@ -231,12 +245,12 @@ impl SnippetGenerator {
                     return pos + 1;
                 }
             }
-            
+
             // Also check for paragraph boundaries
             if bytes[pos] == b'\n' {
                 return pos;
             }
-            
+
             pos += 1;
         }
 
@@ -274,12 +288,13 @@ mod tests {
     #[test]
     fn test_sentence_boundary_detection() {
         let generator = SnippetGenerator::new();
-        let content = "This is the first sentence. This is the second sentence! And this is the third?";
-        
+        let content =
+            "This is the first sentence. This is the second sentence! And this is the third?";
+
         // Test finding sentence start
         assert_eq!(generator.find_sentence_start(content, 35), 28);
-        
-        // Test finding sentence end  
+
+        // Test finding sentence end
         assert_eq!(generator.find_sentence_end(content, 35), 56);
     }
 
@@ -288,25 +303,28 @@ mod tests {
         let generator = SnippetGenerator::new();
         let content = "The database connection is important. You need to configure the connection string properly. The connection pool size matters.";
         let query = "database connection";
-        
+
         let snippets = generator.generate_snippets(content, query);
         assert!(!snippets.is_empty());
-        
+
         // Check that snippets preserve sentence boundaries
         for snippet in &snippets {
             // Should not start or end mid-word (unless with ellipsis)
             if !snippet.starts_with("...") {
-                assert!(snippet.chars().next().unwrap().is_uppercase() || snippet.chars().next().unwrap().is_alphabetic());
+                assert!(
+                    snippet.chars().next().unwrap().is_uppercase()
+                        || snippet.chars().next().unwrap().is_alphabetic()
+                );
             }
         }
     }
 
-    #[test] 
+    #[test]
     fn test_multiple_snippets() {
         let generator = SnippetGenerator::new();
         let content = "First paragraph about database connections. Some unrelated content here. Second paragraph with database mentioned. More unrelated text. Third section discussing connection pooling.";
         let query = "database connection";
-        
+
         let snippets = generator.generate_snippets(content, query);
         assert!(snippets.len() <= 3);
     }
@@ -324,7 +342,7 @@ mod tests {
         let generator = SnippetGenerator::new();
         let content = "This content has nothing related to the query.";
         let query = "xyz123";
-        
+
         let snippets = generator.generate_snippets(content, query);
         assert_eq!(snippets.len(), 1);
         // Should return beginning of content

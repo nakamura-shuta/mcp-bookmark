@@ -278,11 +278,13 @@ impl BookmarkSearcher {
         if let Some(content_value) = doc.get_first(self.schema.content) {
             if let Some(content_text) = content_value.as_str() {
                 // Generate multiple snippets with sentence boundary awareness
-                let snippets = self.snippet_generator.generate_snippets(content_text, query);
-                
+                let snippets = self
+                    .snippet_generator
+                    .generate_snippets(content_text, query);
+
                 // Store multiple snippets (Phase 1.1 improvement)
                 result.content_snippets = snippets.clone();
-                
+
                 // Keep backward compatibility - store first snippet in old field
                 result.content_snippet = snippets.first().cloned();
             }

@@ -85,9 +85,7 @@ fn parse_args() -> Result<Config> {
     if config.target_folder.is_none() {
         if let Ok(folder) = env::var("CHROME_TARGET_FOLDER") {
             tracing::info!("CHROME_TARGET_FOLDER environment variable: {}", folder);
-            eprintln!(
-                "DEBUG: CHROME_TARGET_FOLDER environment variable found: {folder}"
-            );
+            eprintln!("DEBUG: CHROME_TARGET_FOLDER environment variable found: {folder}");
             config.target_folder = Some(folder);
         } else {
             tracing::debug!("CHROME_TARGET_FOLDER not set in environment");
