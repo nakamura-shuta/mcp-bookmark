@@ -8,12 +8,14 @@ use tantivy::{
 };
 
 use super::schema::BookmarkSchema;
+use super::snippet::SnippetGenerator;
 
 /// Handles search operations on the bookmark index
 pub struct BookmarkSearcher {
     index: Index,
     schema: BookmarkSchema,
     pub reader: IndexReader,
+    snippet_generator: SnippetGenerator,
 }
 
 impl std::fmt::Debug for BookmarkSearcher {
@@ -38,6 +40,7 @@ impl BookmarkSearcher {
             index,
             schema,
             reader,
+            snippet_generator: SnippetGenerator::new(),
         })
     }
 
@@ -245,6 +248,7 @@ impl BookmarkSearcher {
         let has_full_content = content.is_some();
         // Snippet will be generated later based on search query
         let content_snippet = None;
+        let content_snippets = Vec::new();
 
         Ok(SearchResult {
             id,
@@ -256,6 +260,7 @@ impl BookmarkSearcher {
             date_added,
             date_modified,
             content_snippet,
+            content_snippets,
             has_full_content,
         })
     }
@@ -269,10 +274,17 @@ impl BookmarkSearcher {
     ) -> Result<SearchResult> {
         let mut result = self.doc_to_result(doc, score)?;
 
-        // Generate snippet from content
+        // Generate snippets from content using the improved snippet generator
         if let Some(content_value) = doc.get_first(self.schema.content) {
             if let Some(content_text) = content_value.as_str() {
-                result.content_snippet = self.generate_snippet(content_text, query);
+                // Generate multiple snippets with sentence boundary awareness
+                let snippets = self.snippet_generator.generate_snippets(content_text, query);
+                
+                // Store multiple snippets (Phase 1.1 improvement)
+                result.content_snippets = snippets.clone();
+                
+                // Keep backward compatibility - store first snippet in old field
+                result.content_snippet = snippets.first().cloned();
             }
         }
 
@@ -414,7 +426,8 @@ pub struct SearchResult {
     pub score: f32,
     pub date_added: i64,
     pub date_modified: i64,
-    pub content_snippet: Option<String>, // Excerpt from search hit
+    pub content_snippet: Option<String>, // Excerpt from search hit (backward compatibility)
+    pub content_snippets: Vec<String>,   // Multiple relevant snippets (Phase 1.1 improvement)
     pub has_full_content: bool,          // Whether content exists in index
 }
 

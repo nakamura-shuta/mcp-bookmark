@@ -5,6 +5,7 @@ pub mod readonly_searcher;
 pub mod schema;
 pub mod search_manager_trait;
 pub mod searcher;
+pub mod snippet;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
