@@ -18,7 +18,7 @@ fn log_to_file(msg: &str) {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        let _ = writeln!(file, "[{}] {}", timestamp, msg);
+        let _ = writeln!(file, "[{timestamp}] {msg}");
     }
 }
 
@@ -41,8 +41,8 @@ impl NativeMessagingHost {
         // Use the same directory as MCP server with proper naming
         let index_key = format!(
             "{}_{}",
-            self.profile_id.replace('/', "_").replace(' ', "_"),
-            self.folder_name.replace('/', "_").replace(' ', "_")
+            self.profile_id.replace(['/', ' '], "_"),
+            self.folder_name.replace(['/', ' '], "_")
         );
         let index_path = dirs::data_dir()
             .unwrap_or_else(|| std::path::PathBuf::from("."))
@@ -257,7 +257,7 @@ impl NativeMessagingHost {
                 })
             }
             Err(e) => {
-                log_to_file(&format!("Failed to index bookmark: {}", e));
+                log_to_file(&format!("Failed to index bookmark: {e}"));
                 json!({
                     "jsonrpc": "2.0",
                     "id": id,
@@ -308,7 +308,7 @@ impl NativeMessagingHost {
                         })
                     }
                     Err(e) => {
-                        log_to_file(&format!("Failed to clear index: {}", e));
+                        log_to_file(&format!("Failed to clear index: {e}"));
                         json!({
                             "jsonrpc": "2.0",
                             "id": id,
@@ -368,17 +368,17 @@ fn main() -> io::Result<()> {
         match io::stdin().read_exact(&mut len_bytes) {
             Ok(_) => {}
             Err(e) => {
-                log_to_file(&format!("Error reading length bytes: {}", e));
+                log_to_file(&format!("Error reading length bytes: {e}"));
                 break; // EOF or error, exit
             }
         }
 
         let msg_len = u32::from_le_bytes(len_bytes) as usize;
-        log_to_file(&format!("Received message length: {}", msg_len));
+        log_to_file(&format!("Received message length: {msg_len}"));
 
         if msg_len == 0 || msg_len > 100_000_000 {
             // Increased from 10MB to 100MB
-            log_to_file(&format!("Invalid message length: {}", msg_len));
+            log_to_file(&format!("Invalid message length: {msg_len}"));
             continue;
         }
 
@@ -387,7 +387,7 @@ fn main() -> io::Result<()> {
         match io::stdin().read_exact(&mut buffer) {
             Ok(_) => {}
             Err(e) => {
-                log_to_file(&format!("Error reading message: {}", e));
+                log_to_file(&format!("Error reading message: {e}"));
                 return Err(e);
             }
         }
@@ -401,7 +401,7 @@ fn main() -> io::Result<()> {
         let message: Value = match serde_json::from_slice(&buffer) {
             Ok(msg) => msg,
             Err(e) => {
-                log_to_file(&format!("Failed to parse JSON: {}", e));
+                log_to_file(&format!("Failed to parse JSON: {e}"));
                 continue;
             }
         };

@@ -6,7 +6,7 @@ fn test_profile_resolver_creation() {
     // Test that ProfileResolver creation works or fails gracefully
     match ProfileResolver::new() {
         Ok(_) => println!("ProfileResolver created successfully"),
-        Err(e) => println!("ProfileResolver creation failed (expected in CI): {}", e),
+        Err(e) => println!("ProfileResolver creation failed (expected in CI): {e}"),
     }
 }
 

@@ -1,11 +1,12 @@
 use anyhow::Result;
+use async_trait::async_trait;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use tokio::sync::{Mutex, Semaphore};
 use tokio::time::{Duration, timeout};
 use tracing::{debug, info, warn};
 
-use super::{SearchManager, SearchParams, SearchResult};
+use super::{SearchManager, SearchParams, SearchResult, search_manager_trait::SearchManagerTrait};
 use crate::bookmark::{BookmarkReader, FlatBookmark};
 use crate::content::ContentFetcher;
 
@@ -380,6 +381,30 @@ impl ContentIndexManager {
                 Ok(None)
             }
         }
+    }
+}
+
+// Implement the SearchManagerTrait for ContentIndexManager
+#[async_trait]
+impl SearchManagerTrait for ContentIndexManager {
+    async fn search(&self, query: &str, limit: usize) -> Result<Vec<SearchResult>> {
+        self.search(query, limit).await
+    }
+
+    async fn search_advanced(&self, params: &SearchParams) -> Result<Vec<SearchResult>> {
+        self.search_advanced(params).await
+    }
+
+    async fn get_content_by_url(&self, url: &str) -> Result<Option<String>> {
+        self.get_content_by_url(url).await
+    }
+
+    fn get_indexing_status(&self) -> String {
+        self.get_indexing_status()
+    }
+
+    fn is_indexing_complete(&self) -> bool {
+        self.is_indexing_complete()
     }
 }
 

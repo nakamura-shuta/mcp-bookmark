@@ -49,18 +49,29 @@ impl BookmarkSearcher {
 
     /// Simple text search across all text fields
     pub fn search(&self, query: &str, limit: usize) -> Result<Vec<SearchResult>> {
+        tracing::debug!(
+            "BookmarkSearcher::search called with query: '{}', limit: {}",
+            query,
+            limit
+        );
         let searcher = self.reader.searcher();
+        tracing::debug!("Got searcher");
 
         // Create query parser for text fields
-        let query_parser = QueryParser::for_index(&self.index, self.schema.text_fields());
+        let text_fields = self.schema.text_fields();
+        tracing::debug!("Got text fields: {} fields", text_fields.len());
+        let query_parser = QueryParser::for_index(&self.index, text_fields);
+        tracing::debug!("Created query parser");
 
         let parsed_query = query_parser
             .parse_query(query)
             .context("Failed to parse search query")?;
+        tracing::debug!("Parsed query successfully");
 
         let top_docs = searcher
             .search(&parsed_query, &TopDocs::with_limit(limit))
             .context("Search failed")?;
+        tracing::debug!("Search executed, got {} results", top_docs.len());
 
         let mut results = Vec::new();
         for (score, doc_address) in top_docs {

@@ -1,6 +1,9 @@
 pub mod content_index;
 pub mod indexer;
+pub mod readonly_index;
+pub mod readonly_searcher;
 pub mod schema;
+pub mod search_manager_trait;
 pub mod searcher;
 
 use anyhow::{Context, Result};
@@ -200,7 +203,13 @@ impl SearchManager {
 
     /// Simple text search
     pub fn search(&self, query: &str, limit: usize) -> Result<Vec<SearchResult>> {
-        self.searcher.search(query, limit)
+        debug!(
+            "SearchManager::search called with query: '{}', limit: {}",
+            query, limit
+        );
+        let result = self.searcher.search(query, limit);
+        debug!("SearchManager::search completed");
+        result
     }
 
     /// Search only in content field

@@ -11,7 +11,7 @@ use serde_json::json;
 use std::sync::Arc;
 
 use crate::bookmark::BookmarkReader;
-use crate::search::{ContentIndexManager, SearchParams};
+use crate::search::{SearchParams, search_manager_trait::SearchManagerTrait};
 
 // Tool request/response types
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -39,13 +39,13 @@ pub struct GetBookmarkContentRequest {
 #[derive(Debug, Clone)]
 pub struct BookmarkServer {
     pub reader: Arc<BookmarkReader>,
-    pub search_manager: Arc<ContentIndexManager>,
+    pub search_manager: Arc<dyn SearchManagerTrait>,
     tool_router: ToolRouter<Self>,
 }
 
 #[tool_router]
 impl BookmarkServer {
-    pub fn new(reader: Arc<BookmarkReader>, search_manager: Arc<ContentIndexManager>) -> Self {
+    pub fn new(reader: Arc<BookmarkReader>, search_manager: Arc<dyn SearchManagerTrait>) -> Self {
         Self {
             reader,
             search_manager,

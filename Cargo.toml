@@ -20,6 +20,7 @@ url = "2.5"
 dirs = "5.0"
 tantivy = "0.24"
 readability = "0.3"
+async-trait = "0.1.89"
 
 [[bin]]
 name = "mcp-bookmark-native"

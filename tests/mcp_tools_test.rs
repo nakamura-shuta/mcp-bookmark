@@ -25,7 +25,7 @@ async fn test_server_creation() {
         Ok(sm) => Arc::new(sm),
         Err(e) => {
             // Index creation can fail in test environment, that's okay
-            println!("⚠️ Could not create search manager in test: {}", e);
+            println!("⚠️ Could not create search manager in test: {e}");
             // Create a minimal test without search functionality
             return;
         }

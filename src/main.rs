@@ -11,7 +11,10 @@ use config::Config;
 use content::ContentFetcher;
 use mcp_server::BookmarkServer;
 use rmcp::{ServiceExt, transport::stdio};
-use search::ContentIndexManager;
+use search::{
+    ContentIndexManager, readonly_index::ReadOnlyIndexManager,
+    search_manager_trait::SearchManagerTrait,
+};
 use std::env;
 use std::sync::Arc;
 use tracing_appender::{non_blocking, rolling};
@@ -83,8 +86,7 @@ fn parse_args() -> Result<Config> {
         if let Ok(folder) = env::var("CHROME_TARGET_FOLDER") {
             tracing::info!("CHROME_TARGET_FOLDER environment variable: {}", folder);
             eprintln!(
-                "DEBUG: CHROME_TARGET_FOLDER environment variable found: {}",
-                folder
+                "DEBUG: CHROME_TARGET_FOLDER environment variable found: {folder}"
             );
             config.target_folder = Some(folder);
         } else {
@@ -138,17 +140,17 @@ fn list_indexes() {
             if path.is_dir() && path.file_name().unwrap() != "logs" {
                 if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
                     found = true;
-                    print!("  {}", name);
+                    print!("  {name}");
 
                     // Read metadata if exists
                     let meta_path = path.join("meta.json");
                     if let Ok(content) = std::fs::read_to_string(meta_path) {
                         if let Ok(meta) = serde_json::from_str::<serde_json::Value>(&content) {
                             if let Some(count) = meta["bookmark_count"].as_u64() {
-                                print!(" ({} bookmarks", count);
+                                print!(" ({count} bookmarks");
                             }
                             if let Some(updated) = meta["last_updated"].as_str() {
-                                print!(", updated: {}", updated);
+                                print!(", updated: {updated}");
                             }
                             print!(")");
                         }
@@ -163,7 +165,7 @@ fn list_indexes() {
                         } else {
                             (size as f64 / 1024.0 / 1024.0, "MB")
                         };
-                        print!(" [{:.1}{}]", size_str, unit);
+                        print!(" [{size_str:.1}{unit}]");
                     }
 
                     println!();
@@ -193,13 +195,13 @@ fn clear_index(key: Option<&str>) {
     };
 
     if !index_dir.exists() {
-        println!("Index not found: {:?}", index_dir);
+        println!("Index not found: {index_dir:?}");
         return;
     }
 
     match std::fs::remove_dir_all(&index_dir) {
-        Ok(_) => println!("Index cleared: {:?}", index_dir),
-        Err(e) => println!("Failed to clear index: {}", e),
+        Ok(_) => println!("Index cleared: {index_dir:?}"),
+        Err(e) => println!("Failed to clear index: {e}"),
     }
 }
 
@@ -220,7 +222,7 @@ fn clear_all_indexes() {
             let path = entry.path();
             if path.is_dir() && path.file_name().unwrap() != "logs" {
                 if let Err(e) = std::fs::remove_dir_all(&path) {
-                    println!("Failed to clear {:?}: {}", path, e);
+                    println!("Failed to clear {path:?}: {e}");
                 } else {
                     cleared += 1;
                 }
@@ -228,7 +230,7 @@ fn clear_all_indexes() {
         }
     }
 
-    println!("Cleared {} indexes.", cleared);
+    println!("Cleared {cleared} indexes.");
 }
 
 /// Get directory size recursively
@@ -342,8 +344,27 @@ async fn main() -> Result<()> {
 
     // Initialize search manager
     tracing::debug!("Initializing search index...");
-    let search_manager = ContentIndexManager::new(reader.clone(), fetcher.clone()).await?;
-    let search_manager = Arc::new(search_manager);
+
+    // Check if using Chrome extension index (use read-only mode)
+    let using_chrome_extension = config.profile_name.is_some() && config.target_folder.is_some();
+
+    let search_manager: Arc<dyn SearchManagerTrait> = if using_chrome_extension {
+        tracing::info!("Using Chrome extension index in read-only mode (lock-free)");
+        // Use read-only manager for Chrome extension indexes
+        match ReadOnlyIndexManager::new(reader.clone()).await {
+            Ok(manager) => Arc::new(manager),
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to open read-only index: {}. Falling back to normal mode.",
+                    e
+                );
+                Arc::new(ContentIndexManager::new(reader.clone(), fetcher.clone()).await?)
+            }
+        }
+    } else {
+        // Use normal manager for regular bookmarks
+        Arc::new(ContentIndexManager::new(reader.clone(), fetcher.clone()).await?)
+    };
 
     tracing::info!("Server ready");
     tracing::info!("{}", search_manager.get_indexing_status());

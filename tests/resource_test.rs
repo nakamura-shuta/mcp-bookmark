@@ -37,7 +37,7 @@ async fn test_bookmark_reader_with_profile() {
         }
         Err(e) => {
             // It's ok if profile doesn't exist in test environment
-            println!("⚠️ Profile not found (expected in test environment): {}", e);
+            println!("⚠️ Profile not found (expected in test environment): {e}");
         }
     }
 }
@@ -54,7 +54,7 @@ async fn test_folder_filtering() {
             println!("✅ Got {} bookmarks with folder filter", bookmarks.len());
         }
         Err(e) => {
-            println!("⚠️ Could not test folder filtering: {}", e);
+            println!("⚠️ Could not test folder filtering: {e}");
         }
     }
 }
