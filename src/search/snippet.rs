@@ -81,8 +81,23 @@ impl SnippetGenerator {
         let step = 50;
 
         for start in (0..content.len()).step_by(step) {
-            let end = min(start + window_size, content.len());
-            let window_text = &content_lower[start..end];
+            // Ensure we're at a valid UTF-8 boundary for start
+            let mut start_byte = start;
+            while start_byte < content.len() && !content.is_char_boundary(start_byte) {
+                start_byte += 1;
+            }
+            if start_byte >= content.len() {
+                break;
+            }
+
+            let end = min(start_byte + window_size, content.len());
+            // Ensure we're at a valid UTF-8 boundary for end
+            let mut end_byte = end;
+            while end_byte < content.len() && !content.is_char_boundary(end_byte) {
+                end_byte += 1;
+            }
+            
+            let window_text = &content_lower[start_byte..end_byte];
             
             let mut score = 0.0;
             let mut match_found = false;
@@ -98,7 +113,7 @@ impl SnippetGenerator {
             if match_found {
                 // Calculate term density for scoring
                 let density = score / (window_size as f32 / 100.0);
-                positions.push((start, density));
+                positions.push((start_byte, density));
             }
         }
 
@@ -111,14 +126,24 @@ impl SnippetGenerator {
         let start = self.find_sentence_start(content, position.saturating_sub(self.context_window));
         let end = self.find_sentence_end(content, min(position + self.context_window, content.len()));
         
+        // Ensure start and end are at valid UTF-8 boundaries
+        let mut start_byte = start;
+        while start_byte < content.len() && !content.is_char_boundary(start_byte) {
+            start_byte += 1;
+        }
+        let mut end_byte = end;
+        while end_byte > start_byte && !content.is_char_boundary(end_byte) {
+            end_byte -= 1;
+        }
+        
         // Extract the snippet
-        let mut snippet = content[start..end].trim().to_string();
+        let mut snippet = content[start_byte..end_byte].trim().to_string();
         
         // Add ellipsis if needed
-        if start > 0 {
+        if start_byte > 0 {
             snippet = format!("...{}", snippet);
         }
-        if end < content.len() {
+        if end_byte < content.len() {
             snippet = format!("{}...", snippet);
         }
 
@@ -130,15 +155,27 @@ impl SnippetGenerator {
 
     /// Extract a sentence-aware snippet from a specific position
     fn extract_sentence_aware_snippet(&self, content: &str, start: usize, max_length: usize) -> String {
-        let end = min(start + max_length, content.len());
+        // Ensure start is at a valid UTF-8 boundary
+        let mut start_byte = start;
+        while start_byte < content.len() && !content.is_char_boundary(start_byte) {
+            start_byte += 1;
+        }
+        
+        let end = min(start_byte + max_length, content.len());
         let sentence_end = self.find_sentence_end(content, end);
         
-        let mut snippet = content[start..sentence_end].trim().to_string();
+        // Ensure sentence_end is at a valid UTF-8 boundary
+        let mut end_byte = sentence_end;
+        while end_byte > start_byte && !content.is_char_boundary(end_byte) {
+            end_byte -= 1;
+        }
         
-        if start > 0 {
+        let mut snippet = content[start_byte..end_byte].trim().to_string();
+        
+        if start_byte > 0 {
             snippet = format!("...{}", snippet);
         }
-        if sentence_end < content.len() {
+        if end_byte < content.len() {
             snippet = format!("{}...", snippet);
         }
         
