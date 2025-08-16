@@ -1,6 +1,7 @@
 use std::cmp::min;
 
 /// Improved snippet generator that considers sentence boundaries
+#[derive(Debug)]
 pub struct SnippetGenerator {
     max_snippet_length: usize,
     max_snippets: usize,

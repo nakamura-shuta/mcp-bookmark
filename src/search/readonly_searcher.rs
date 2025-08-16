@@ -2,12 +2,13 @@ use anyhow::{Context, Result};
 use std::path::Path;
 use tantivy::{Index, directory::MmapDirectory};
 
-use super::{BookmarkSchema, SearchResult, searcher::BookmarkSearcher};
+use super::{BookmarkSchema, SearchResult, boosting::SearchBooster, searcher::BookmarkSearcher};
 
 /// Read-only searcher for Chrome extension indexes
 /// This doesn't use any locks and allows multiple processes to access the same index
 pub struct ReadOnlySearcher {
     searcher: BookmarkSearcher,
+    booster: Option<SearchBooster>,
 }
 
 impl std::fmt::Debug for ReadOnlySearcher {
@@ -37,14 +38,26 @@ impl ReadOnlySearcher {
         let schema = BookmarkSchema::new();
 
         // Create a custom BookmarkSearcher with read-only settings
-        let searcher = BookmarkSearcher::new(index, schema)?;
+        let searcher = BookmarkSearcher::new(index.clone(), schema.clone())?;
 
-        Ok(Self { searcher })
+        // Create booster with the same index and reader
+        let booster = SearchBooster::new(index, schema, searcher.reader.clone());
+
+        Ok(Self {
+            searcher,
+            booster: Some(booster),
+        })
     }
 
     /// Search the index (no locks, thread-safe)
+    /// Uses field boosting for better relevance (Phase 1.2)
     pub fn search(&self, query: &str, limit: usize) -> Result<Vec<SearchResult>> {
-        self.searcher.search(query, limit)
+        // Use booster if available for improved relevance
+        if let Some(booster) = &self.booster {
+            booster.search_with_boosting(query, limit)
+        } else {
+            self.searcher.search(query, limit)
+        }
     }
 
     /// Get content by URL

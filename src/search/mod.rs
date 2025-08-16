@@ -1,3 +1,4 @@
+pub mod boosting;
 pub mod content_index;
 pub mod indexer;
 pub mod readonly_index;
@@ -44,6 +45,7 @@ pub struct SearchManager {
     schema: BookmarkSchema,
     indexer: BookmarkIndexer,
     searcher: BookmarkSearcher,
+    booster: Option<boosting::SearchBooster>,
     index_path: PathBuf,
 }
 
@@ -141,11 +143,19 @@ impl SearchManager {
         let indexer = BookmarkIndexer::new(index.clone(), schema.clone());
         let searcher = BookmarkSearcher::new(index.clone(), schema.clone())?;
 
+        // Create booster for improved relevance (Phase 1.2)
+        let booster = Some(boosting::SearchBooster::new(
+            index.clone(),
+            schema.clone(),
+            searcher.reader.clone(),
+        ));
+
         Ok(Self {
             index,
             schema,
             indexer,
             searcher,
+            booster,
             index_path,
         })
     }
@@ -208,7 +218,12 @@ impl SearchManager {
             "SearchManager::search called with query: '{}', limit: {}",
             query, limit
         );
-        let result = self.searcher.search(query, limit);
+        // Use booster if available for improved relevance (Phase 1.2)
+        let result = if let Some(booster) = &self.booster {
+            booster.search_with_boosting(query, limit)
+        } else {
+            self.searcher.search(query, limit)
+        };
         debug!("SearchManager::search completed");
         result
     }
