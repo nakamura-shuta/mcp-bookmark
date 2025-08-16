@@ -8,6 +8,7 @@ use tantivy::{
 };
 
 use super::schema::BookmarkSchema;
+use super::scored_snippet::{ScoredSnippet, ScoredSnippetGenerator};
 use super::snippet::SnippetGenerator;
 
 /// Handles search operations on the bookmark index
@@ -16,6 +17,7 @@ pub struct BookmarkSearcher {
     schema: BookmarkSchema,
     pub reader: IndexReader,
     snippet_generator: SnippetGenerator,
+    scored_snippet_generator: ScoredSnippetGenerator,
 }
 
 impl std::fmt::Debug for BookmarkSearcher {
@@ -41,6 +43,7 @@ impl BookmarkSearcher {
             schema,
             reader,
             snippet_generator: SnippetGenerator::new(),
+            scored_snippet_generator: ScoredSnippetGenerator::new(),
         })
     }
 
@@ -249,6 +252,7 @@ impl BookmarkSearcher {
         // Snippet will be generated later based on search query
         let content_snippet = None;
         let content_snippets = Vec::new();
+        let scored_snippets = Vec::new();
 
         Ok(SearchResult {
             id,
@@ -261,6 +265,7 @@ impl BookmarkSearcher {
             date_modified,
             content_snippet,
             content_snippets,
+            scored_snippets,
             has_full_content,
         })
     }
@@ -282,11 +287,18 @@ impl BookmarkSearcher {
                     .snippet_generator
                     .generate_snippets(content_text, query);
 
-                // Store multiple snippets (Phase 1.1 improvement)
+                // Store multiple snippets
                 result.content_snippets = snippets.clone();
 
                 // Keep backward compatibility - store first snippet in old field
                 result.content_snippet = snippets.first().cloned();
+
+                // Generate scored snippets with relevance information
+                let scored_snippets = self
+                    .scored_snippet_generator
+                    .generate_scored_snippets(content_text, query);
+
+                result.scored_snippets = scored_snippets;
             }
         }
 
@@ -430,6 +442,7 @@ pub struct SearchResult {
     pub date_modified: i64,
     pub content_snippet: Option<String>, // Excerpt from search hit (backward compatibility)
     pub content_snippets: Vec<String>,   // Multiple relevant snippets (Phase 1.1 improvement)
+    pub scored_snippets: Vec<ScoredSnippet>, // Phase 2.2: Snippets with relevance scores
     pub has_full_content: bool,          // Whether content exists in index
 }
 

@@ -9,6 +9,7 @@ use tracing::debug;
 
 use super::{
     schema::BookmarkSchema,
+    scored_snippet::ScoredSnippetGenerator,
     searcher::{BookmarkSearcher, SearchResult},
     snippet::SnippetGenerator,
 };
@@ -19,6 +20,7 @@ pub struct SearchBooster {
     schema: BookmarkSchema,
     reader: IndexReader,
     snippet_generator: SnippetGenerator,
+    scored_snippet_generator: ScoredSnippetGenerator,
 }
 
 impl std::fmt::Debug for SearchBooster {
@@ -38,6 +40,7 @@ impl SearchBooster {
             schema,
             reader,
             snippet_generator: SnippetGenerator::new(),
+            scored_snippet_generator: ScoredSnippetGenerator::new(),
         }
     }
 
@@ -99,6 +102,7 @@ impl SearchBooster {
             let result = BookmarkSearcher::doc_to_result_with_boosting(
                 &self.schema,
                 &self.snippet_generator,
+                &self.scored_snippet_generator,
                 &doc,
                 score,
                 query,
@@ -118,6 +122,7 @@ impl BookmarkSearcher {
     pub fn doc_to_result_with_boosting(
         schema: &BookmarkSchema,
         snippet_generator: &SnippetGenerator,
+        scored_snippet_generator: &ScoredSnippetGenerator,
         doc: &tantivy::TantivyDocument,
         score: f32,
         query: &str,
@@ -171,12 +176,14 @@ impl BookmarkSearcher {
 
         let has_full_content = content.is_some();
 
-        let (content_snippet, content_snippets) = if let Some(content_text) = &content {
-            let snippets = snippet_generator.generate_snippets(content_text, query);
-            (snippets.first().cloned(), snippets)
-        } else {
-            (None, Vec::new())
-        };
+        let (content_snippet, content_snippets, scored_snippets) =
+            if let Some(content_text) = &content {
+                let snippets = snippet_generator.generate_snippets(content_text, query);
+                let scored = scored_snippet_generator.generate_scored_snippets(content_text, query);
+                (snippets.first().cloned(), snippets, scored)
+            } else {
+                (None, Vec::new(), Vec::new())
+            };
 
         Ok(SearchResult {
             id,
@@ -189,6 +196,7 @@ impl BookmarkSearcher {
             date_modified,
             content_snippet,
             content_snippets,
+            scored_snippets,
             has_full_content,
         })
     }

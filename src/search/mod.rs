@@ -4,6 +4,7 @@ pub mod indexer;
 pub mod readonly_index;
 pub mod readonly_searcher;
 pub mod schema;
+pub mod scored_snippet;
 pub mod search_manager_trait;
 pub mod searcher;
 pub mod snippet;
