@@ -24,30 +24,23 @@ fn log_to_file(msg: &str) {
 
 struct NativeMessagingHost {
     indexer: Option<BookmarkIndexer>,
-    profile_id: String,
-    folder_name: String,
+    index_name: String,
 }
 
 impl NativeMessagingHost {
     fn new() -> Self {
         Self {
             indexer: None,
-            profile_id: "Extension".to_string(),
-            folder_name: "Bookmarks".to_string(),
+            index_name: "Extension_Bookmarks".to_string(),
         }
     }
 
     fn init_tantivy(&mut self) -> Result<()> {
-        // Use the same directory as MCP server with proper naming
-        let index_key = format!(
-            "{}_{}",
-            self.profile_id.replace(['/', ' '], "_"),
-            self.folder_name.replace(['/', ' '], "_")
-        );
+        // Use the same directory as MCP server with index name
         let index_path = dirs::data_dir()
             .unwrap_or_else(|| std::path::PathBuf::from("."))
             .join("mcp-bookmark")
-            .join(index_key);
+            .join(&self.index_name);
 
         // Create directory if it doesn't exist
         std::fs::create_dir_all(&index_path)?;
@@ -64,8 +57,8 @@ impl NativeMessagingHost {
 
         self.indexer = Some(BookmarkIndexer::new(index, schema));
         log_to_file(&format!(
-            "Tantivy index initialized for folder: {}",
-            self.folder_name
+            "Tantivy index initialized: {}",
+            self.index_name
         ));
         Ok(())
     }
@@ -82,30 +75,26 @@ impl NativeMessagingHost {
                     "result": {
                         "status": "ok",
                         "tantivy_initialized": self.indexer.is_some(),
-                        "folder_name": self.folder_name
+                        "index_name": self.index_name
                     }
                 })
             }
 
             "set_context" => {
                 let params = &message["params"];
-                if let Some(folder) = params["folder_name"].as_str() {
-                    self.folder_name = folder.to_string();
-                    if let Some(profile) = params["profile_id"].as_str() {
-                        self.profile_id = profile.to_string();
-                    }
+                if let Some(index_name) = params["index_name"].as_str() {
+                    self.index_name = index_name.to_string();
                     self.indexer = None; // Clear existing indexer to force re-init
                     log_to_file(&format!(
-                        "Context set - Profile: {}, Folder: {}",
-                        self.profile_id, self.folder_name
+                        "Context set - Index: {}",
+                        self.index_name
                     ));
                     json!({
                         "jsonrpc": "2.0",
                         "id": id,
                         "result": {
                             "status": "ok",
-                            "profile_id": self.profile_id,
-                            "folder_name": self.folder_name
+                            "index_name": self.index_name
                         }
                     })
                 } else {
@@ -114,46 +103,13 @@ impl NativeMessagingHost {
                         "id": id,
                         "error": {
                             "code": -32602,
-                            "message": "Invalid params: folder_name required"
-                        }
-                    })
-                }
-            }
-
-            // Keep old method for compatibility
-            "set_folder" => {
-                if let Some(folder) = message["params"]["folder_name"].as_str() {
-                    self.folder_name = folder.to_string();
-                    self.indexer = None;
-                    log_to_file(&format!("Folder set to: {}", self.folder_name));
-                    json!({
-                        "jsonrpc": "2.0",
-                        "id": id,
-                        "result": {
-                            "status": "ok",
-                            "folder_name": self.folder_name
-                        }
-                    })
-                } else {
-                    json!({
-                        "jsonrpc": "2.0",
-                        "id": id,
-                        "error": {
-                            "code": -32602,
-                            "message": "Invalid params: folder_name required"
+                            "message": "Invalid params: index_name required"
                         }
                     })
                 }
             }
 
             "index_bookmark" => {
-                // Extract folder name from params if provided
-                if let Some(folder) = message["params"]["folder_name"].as_str() {
-                    self.profile_id = "Extension".to_string(); // Always use Extension
-                    self.folder_name = folder.to_string();
-                    self.indexer = None; // Reset indexer to use new folder
-                }
-
                 // Initialize indexer if needed
                 if self.indexer.is_none() {
                     if let Err(e) = self.init_tantivy() {
@@ -173,6 +129,8 @@ impl NativeMessagingHost {
             "clear_index" => self.clear_index(id),
 
             "get_stats" => self.get_index_stats(id),
+            
+            "list_indexes" => self.list_indexes(id),
 
             // Legacy MCP methods for compatibility
             "initialize" => {
@@ -354,6 +312,70 @@ impl NativeMessagingHost {
                 "indexed": true
             }
         })
+    }
+    
+    fn list_indexes(&self, id: Value) -> Value {
+        let base_path = dirs::data_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("mcp-bookmark");
+            
+        let mut indexes = Vec::new();
+        
+        if let Ok(entries) = std::fs::read_dir(&base_path) {
+            for entry in entries.flatten() {
+                if let Ok(metadata) = entry.metadata() {
+                    if metadata.is_dir() {
+                        let path = entry.path();
+                        let name = entry.file_name().to_string_lossy().to_string();
+                        
+                        // Check if it's a valid index by looking for meta.json
+                        if path.join("meta.json").exists() {
+                            // Calculate size
+                            let size = Self::calculate_dir_size(&path).unwrap_or(0);
+                            
+                            // Count documents (simplified - just check if index can be opened)
+                            let doc_count = if let Ok(index) = Index::open_in_dir(&path) {
+                                index.reader().ok()
+                                    .map(|reader| reader.searcher().num_docs() as usize)
+                                    .unwrap_or(0)
+                            } else {
+                                0
+                            };
+                            
+                            indexes.push(json!({
+                                "name": name,
+                                "size": size,
+                                "doc_count": doc_count
+                            }));
+                        }
+                    }
+                }
+            }
+        }
+        
+        json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "result": {
+                "indexes": indexes
+            }
+        })
+    }
+    
+    fn calculate_dir_size(path: &std::path::Path) -> Result<u64> {
+        let mut size = 0;
+        if let Ok(entries) = std::fs::read_dir(path) {
+            for entry in entries.flatten() {
+                if let Ok(metadata) = entry.metadata() {
+                    if metadata.is_file() {
+                        size += metadata.len();
+                    } else if metadata.is_dir() {
+                        size += Self::calculate_dir_size(&entry.path()).unwrap_or(0);
+                    }
+                }
+            }
+        }
+        Ok(size)
     }
 }
 

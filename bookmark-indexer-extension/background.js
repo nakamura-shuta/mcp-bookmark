@@ -44,7 +44,7 @@ async function fetchContent(url) {
         if (tabId === tab.id && changeInfo.status === 'complete') {
           chrome.tabs.onUpdated.removeListener(listener);
           // Add extra delay for SPAs like Notion to fully render
-          setTimeout(resolve, 3000);
+          setTimeout(resolve, 5000);
         }
       };
       chrome.tabs.onUpdated.addListener(listener);
@@ -147,21 +147,22 @@ async function indexBookmark(bookmark, folderName) {
 }
 
 // Index bookmarks from a folder
-async function indexFolder(folderId, folderName) {
+async function indexFolder(folderId, folderName, indexName) {
   const tree = await chrome.bookmarks.getSubTree(folderId);
   const bookmarks = flattenTree(tree[0]);
   
   // Use the folder name from popup directly
   const finalFolderName = folderName || tree[0].title || 'Bookmarks';
+  const finalIndexName = indexName || `Extension_${finalFolderName}`;
   
   console.log(`Indexing folder: "${finalFolderName}" (ID: ${folderId})`);
+  console.log(`Index name: "${finalIndexName}"`);
   
-  // Send both profile and folder info to native host
+  // Send index name to native host
   await sendToNative('set_context', { 
-    profile_id: 'Extension',
-    folder_name: finalFolderName 
+    index_name: finalIndexName
   });
-  console.log(`Index will be created as: Extension_${finalFolderName}`);
+  console.log(`Index will be created as: ${finalIndexName}`);
   
   let indexed = 0;
   let failed = 0;
@@ -227,7 +228,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return true;
       
     case 'index_folder':
-      indexFolder(request.folderId || '0', request.folderName)
+      indexFolder(request.folderId || '0', request.folderName, request.indexName)
         .then(result => sendResponse({ success: true, result }))
         .catch(error => sendResponse({ success: false, error: error.message }));
       return true;
@@ -238,8 +239,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         .catch(error => sendResponse({ success: false, error: error.message }));
       return true;
       
-    case 'test':
-      sendToNative('ping', {})
+    case 'list_indexes':
+      sendToNative('list_indexes', {})
         .then(result => sendResponse({ success: true, result }))
         .catch(error => sendResponse({ success: false, error: error.message }));
       return true;

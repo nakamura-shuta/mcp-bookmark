@@ -125,6 +125,20 @@
       <option value="">Loading folders...</option>
     </select>
     
+    <div class="input-group" style="margin-bottom: 10px;">
+      <label for="indexName" style="display: block; font-size: 13px; margin-bottom: 5px; color: #666;">
+        Index Name (optional):
+      </label>
+      <input 
+        type="text" 
+        id="indexName" 
+        placeholder="e.g., work, personal" 
+        pattern="[a-zA-Z0-9_]+" 
+        style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box;"
+      />
+      <small style="font-size: 11px; color: #999;">Leave empty to use folder name</small>
+    </div>
+    
     <button id="index-folder" disabled>
       Index Selected Folder
     </button>
@@ -145,12 +159,17 @@
   
   <div class="divider"></div>
   
-  <button id="test" style="font-size: 12px; padding: 6px;">
-    Test Connection
-  </button>
+  <div class="section">
+    <h3 style="font-size: 14px; margin: 0 0 10px 0;">Existing Indexes</h3>
+    <div id="index-list" style="max-height: 150px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; padding: 8px; background: #f9f9f9;">
+      <div style="color: #999; font-size: 13px;">Loading...</div>
+    </div>
+  </div>
+  
+  <div class="divider"></div>
   
   <button id="clear" class="danger" style="font-size: 12px; padding: 6px;">
-    Clear Index
+    Clear Current Index
   </button>
   
   <script src="popup.js"></script>

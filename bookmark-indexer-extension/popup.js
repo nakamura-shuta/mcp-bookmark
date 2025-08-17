@@ -6,6 +6,7 @@ let selectedFolderName = null;
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
   await loadFolders();
+  await loadIndexList();
   setupListeners();
   
   // Listen for progress updates
@@ -49,6 +50,42 @@ function countBookmarks(node) {
   return node.children.reduce((sum, child) => sum + countBookmarks(child), 0);
 }
 
+// Load existing indexes
+async function loadIndexList() {
+  try {
+    chrome.runtime.sendMessage({ type: 'list_indexes' }, (response) => {
+      const listElement = document.getElementById('index-list');
+      
+      if (response?.success && response.result?.indexes) {
+        const indexes = response.result.indexes;
+        if (indexes.length === 0) {
+          listElement.innerHTML = '<div style="color: #999; font-size: 13px;">No indexes found</div>';
+        } else {
+          listElement.innerHTML = indexes.map(idx => `
+            <div style="padding: 4px 0; border-bottom: 1px solid #eee; font-size: 13px;">
+              <div style="font-weight: 500;">${idx.name}</div>
+              <div style="color: #666; font-size: 11px;">
+                ${idx.doc_count} docs | ${formatSize(idx.size)}
+              </div>
+            </div>
+          `).join('');
+        }
+      } else {
+        listElement.innerHTML = '<div style="color: #999; font-size: 13px;">Failed to load indexes</div>';
+      }
+    });
+  } catch (error) {
+    console.error('Failed to load indexes:', error);
+  }
+}
+
+// Format file size
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
 // Setup event listeners
 function setupListeners() {
   // Folder selection
@@ -65,8 +102,21 @@ function setupListeners() {
     if (!selectedFolderId || !selectedFolderName) return;
     
     const button = document.getElementById('index-folder');
+    const customName = document.getElementById('indexName').value.trim();
     
-    console.log(`Indexing folder: "${selectedFolderName}" (ID: ${selectedFolderId})`);
+    // Validate custom name
+    if (customName && !/^[a-zA-Z0-9_]+$/.test(customName)) {
+      showStatus('Index name can only contain letters, numbers, and underscores', 'error');
+      return;
+    }
+    
+    // Create index name
+    const folderNameSafe = selectedFolderName.replace(/[^a-zA-Z0-9_]/g, '_');
+    const indexName = customName 
+      ? `${customName}_${folderNameSafe}`
+      : `Extension_${folderNameSafe}`;
+    
+    console.log(`Indexing folder: "${selectedFolderName}" with index name: "${indexName}"`);
     
     button.disabled = true;
     showProgress();
@@ -75,7 +125,8 @@ function setupListeners() {
     chrome.runtime.sendMessage({
       type: 'index_folder',
       folderId: selectedFolderId,
-      folderName: selectedFolderName
+      folderName: selectedFolderName,
+      indexName: indexName
     }, (response) => {
       button.disabled = false;
       hideProgress();
@@ -87,6 +138,8 @@ function setupListeners() {
         } else {
           showStatus(`Successfully indexed ${indexed} bookmarks!`, 'success');
         }
+        // Reload index list after successful indexing
+        loadIndexList();
       } else {
         showStatus(`Error: ${response?.error || 'Unknown error'}`, 'error');
       }
@@ -118,17 +171,6 @@ function setupListeners() {
         showStatus('Tab indexed successfully!', 'success');
       } else {
         showStatus(`Error: ${response?.error || 'Unknown error'}`, 'error');
-      }
-    });
-  });
-  
-  // Test connection
-  document.getElementById('test').addEventListener('click', () => {
-    chrome.runtime.sendMessage({ type: 'test' }, (response) => {
-      if (response?.success) {
-        showStatus('Connection OK', 'success');
-      } else {
-        showStatus(`Connection failed: ${response?.error || 'Unknown error'}`, 'error');
       }
     });
   });
