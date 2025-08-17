@@ -103,10 +103,34 @@ impl BookmarkServer {
         };
 
         match results {
-            Ok(results) => {
+            Ok(mut results) => {
                 // Include indexing status
                 let status = self.search_manager.get_indexing_status();
                 let is_complete = self.search_manager.is_indexing_complete();
+
+                // Limit response size for MCP to avoid token limits
+                for result in &mut results {
+                    // Keep only top 2 scored snippets to reduce size
+                    if result.scored_snippets.len() > 2 {
+                        result.scored_snippets.truncate(2);
+                    }
+
+                    // Limit each snippet text to 300 chars
+                    for snippet in &mut result.scored_snippets {
+                        if snippet.text.len() > 300 {
+                            let mut end = 300;
+                            while end > 0 && !snippet.text.is_char_boundary(end) {
+                                end -= 1;
+                            }
+                            snippet.text.truncate(end);
+                            snippet.text.push_str("...");
+                        }
+                    }
+
+                    // Clear legacy fields to save space
+                    result.content_snippet = None;
+                    result.content_snippets.clear();
+                }
 
                 let response = json!({
                     "results": results,

@@ -306,6 +306,7 @@ impl BookmarkSearcher {
     }
 
     /// Generate content snippet around search terms
+    #[allow(dead_code)]
     fn generate_snippet(&self, content: &str, query: &str) -> Option<String> {
         if content.is_empty() {
             return None;

@@ -150,10 +150,10 @@ impl SnippetGenerator {
 
         // Add ellipsis if needed
         if start_byte > 0 {
-            snippet = format!("...{}", snippet);
+            snippet = format!("...{snippet}");
         }
         if end_byte < content.len() {
-            snippet = format!("{}...", snippet);
+            snippet = format!("{snippet}...");
         }
 
         // Highlight query terms (optional, for better visibility)
@@ -187,10 +187,10 @@ impl SnippetGenerator {
         let mut snippet = content[start_byte..end_byte].trim().to_string();
 
         if start_byte > 0 {
-            snippet = format!("...{}", snippet);
+            snippet = format!("...{snippet}");
         }
         if end_byte < content.len() {
-            snippet = format!("{}...", snippet);
+            snippet = format!("{snippet}...");
         }
 
         snippet

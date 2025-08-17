@@ -96,10 +96,23 @@ CHROME_PROFILE_NAME="Extension" CHROME_TARGET_FOLDER="Development" ./target/rele
 ## MCP Tools Available
 
 - `search_bookmarks_fulltext` - Full-text content search (searches titles, URLs, and page content)
-- `get_bookmark_content` - Get content for specific URL
+  - Returns preview snippets (300 chars) for quick identification
+  - Automatically limited to prevent token overflow
+  - Use `limit` parameter to control result count
+- `get_bookmark_content` - Get complete content for specific URL
+  - Use after search to get full page content
+  - No size limitations
 - `list_bookmark_folders` - List available folders
 - `get_indexing_status` - Check indexing progress
 - `get_available_profiles` - List available Chrome profiles
+
+### Search Optimization
+
+The search results are optimized for MCP token limits:
+- Maximum 2 snippets per result (reduced from 5)
+- Maximum 300 characters per snippet (reduced from 400)
+- Legacy fields removed to save space
+- UTF-8 boundary safe truncation for Japanese/multi-byte text
 
 ## Index Storage
 

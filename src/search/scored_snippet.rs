@@ -59,6 +59,19 @@ impl ScoredSnippetGenerator {
         }
     }
 
+    /// Create with custom configuration
+    pub fn with_config(
+        max_snippet_length: usize,
+        max_snippets: usize,
+        context_window: usize,
+    ) -> Self {
+        Self {
+            max_snippet_length,
+            max_snippets,
+            context_window,
+        }
+    }
+
     /// Generate scored snippets from content
     pub fn generate_scored_snippets(&self, content: &str, query: &str) -> Vec<ScoredSnippet> {
         if content.is_empty() || query.is_empty() {
@@ -277,10 +290,10 @@ impl ScoredSnippetGenerator {
 
         // Add ellipsis if needed
         if start_byte > 0 {
-            text = format!("...{}", text);
+            text = format!("...{text}");
         }
         if end_byte < content.len() {
-            text = format!("{}...", text);
+            text = format!("{text}...");
         }
 
         // Detect section heading if possible
@@ -323,17 +336,48 @@ impl ScoredSnippetGenerator {
     /// Find the section heading for a position
     fn find_section_heading(&self, content: &str, position: usize) -> Option<String> {
         // Look backwards for heading patterns
-        let search_start = position.saturating_sub(1000);
-        let search_text = &content[search_start..position];
+        let mut search_start = position.saturating_sub(1000);
+        let mut search_end = position;
+
+        // Ensure valid UTF-8 boundaries
+        while search_start < content.len() && !content.is_char_boundary(search_start) {
+            search_start += 1;
+        }
+        while search_end > search_start && !content.is_char_boundary(search_end) {
+            search_end -= 1;
+        }
+
+        if search_start >= search_end {
+            return None;
+        }
+
+        let search_text = &content[search_start..search_end];
 
         // Look for markdown headers
         if let Some(header_pos) = search_text.rfind("\n#") {
-            let header_start = search_start + header_pos + 1;
-            if let Some(header_end) = content[header_start..].find('\n') {
-                let header = content[header_start..header_start + header_end]
-                    .trim_start_matches('#')
-                    .trim();
-                return Some(header.to_string());
+            let mut header_start = search_start + header_pos + 1;
+
+            // Ensure header_start is at valid UTF-8 boundary
+            while header_start < content.len() && !content.is_char_boundary(header_start) {
+                header_start += 1;
+            }
+
+            if header_start < content.len() {
+                if let Some(header_end_offset) = content[header_start..].find('\n') {
+                    let mut header_end = header_start + header_end_offset;
+
+                    // Ensure header_end is at valid UTF-8 boundary
+                    while header_end > header_start && !content.is_char_boundary(header_end) {
+                        header_end -= 1;
+                    }
+
+                    if header_start < header_end {
+                        let header = content[header_start..header_end]
+                            .trim_start_matches('#')
+                            .trim();
+                        return Some(header.to_string());
+                    }
+                }
             }
         }
 
@@ -406,7 +450,7 @@ impl ScoredSnippetGenerator {
     }
 
     /// Highlight query terms (returns marked text)
-    fn highlight_terms(&self, text: &str, query_terms: &[String]) -> String {
+    fn highlight_terms(&self, text: &str, _query_terms: &[String]) -> String {
         // For now, return as-is
         // Future: Add **term** or <mark>term</mark> highlighting
         text.to_string()
@@ -424,6 +468,7 @@ impl Default for ScoredSnippetGenerator {
 struct MatchInfo {
     position: usize,
     relevance: f32,
+    #[allow(dead_code)]
     match_count: usize,
     context_type: ContextType,
     density: f32,

@@ -1,6 +1,7 @@
 pub mod boosting;
 pub mod content_index;
 pub mod indexer;
+pub mod mcp_config;
 pub mod readonly_index;
 pub mod readonly_searcher;
 pub mod schema;

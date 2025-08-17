@@ -96,10 +96,23 @@ CHROME_PROFILE_NAME="Extension" CHROME_TARGET_FOLDER="Development" ./target/rele
 ## 利用可能な MCP ツール
 
 - `search_bookmarks_fulltext` - 全文コンテンツ検索（タイトル、URL、ページ内容を検索）
-- `get_bookmark_content` - 特定 URL のコンテンツ取得
+  - プレビュースニペット（300文字）を返し、素早い内容確認が可能
+  - トークンオーバーフローを防ぐため自動的に制限
+  - `limit` パラメータで結果数を制御
+- `get_bookmark_content` - 特定 URL の完全なコンテンツ取得
+  - 検索後に全ページコンテンツを取得するために使用
+  - サイズ制限なし
 - `list_bookmark_folders` - 利用可能なフォルダ一覧
 - `get_indexing_status` - インデックス化の進捗確認
 - `get_available_profiles` - Chrome プロファイル一覧の取得
+
+### 検索の最適化
+
+検索結果は MCP トークン制限に最適化されています：
+- 結果ごとに最大 2 スニペット（5 から削減）
+- スニペットごとに最大 300 文字（400 から削減）
+- レガシーフィールドを削除してスペースを節約
+- 日本語/マルチバイトテキストの UTF-8 境界安全な切り詰め
 
 ## インデックスの保存場所
 
