@@ -80,36 +80,14 @@ impl NativeMessagingHost {
                 })
             }
 
-            "set_context" => {
-                let params = &message["params"];
-                if let Some(index_name) = params["index_name"].as_str() {
-                    self.index_name = index_name.to_string();
-                    self.indexer = None; // Clear existing indexer to force re-init
-                    log_to_file(&format!(
-                        "Context set - Index: {}",
-                        self.index_name
-                    ));
-                    json!({
-                        "jsonrpc": "2.0",
-                        "id": id,
-                        "result": {
-                            "status": "ok",
-                            "index_name": self.index_name
-                        }
-                    })
-                } else {
-                    json!({
-                        "jsonrpc": "2.0",
-                        "id": id,
-                        "error": {
-                            "code": -32602,
-                            "message": "Invalid params: index_name required"
-                        }
-                    })
-                }
-            }
-
             "index_bookmark" => {
+                // Update index name if provided in params
+                if let Some(index_name) = message["params"]["index_name"].as_str() {
+                    self.index_name = index_name.to_string();
+                    self.indexer = None; // Reset indexer to use new index
+                    log_to_file(&format!("Index name updated to: {}", self.index_name));
+                }
+                
                 // Initialize indexer if needed
                 if self.indexer.is_none() {
                     if let Err(e) = self.init_tantivy() {

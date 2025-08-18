@@ -124,8 +124,8 @@ async function fetchContent(url) {
   }
 }
 
-// Index a single bookmark
-async function indexBookmark(bookmark, folderName) {
+// Index a single bookmark with specific index
+async function indexBookmarkWithIndex(bookmark, indexName) {
   const content = await fetchContent(bookmark.url);
   
   const payload = {
@@ -134,13 +134,13 @@ async function indexBookmark(bookmark, folderName) {
     title: bookmark.title || content?.title || '',
     content: content?.content || '',
     folder_path: bookmark.folder_path || [],
-    folder_name: folderName,  // Include folder name with each bookmark
     date_added: bookmark.dateAdded,
-    date_modified: bookmark.dateModified || bookmark.dateAdded
+    date_modified: bookmark.dateModified || bookmark.dateAdded,
+    index_name: indexName  // Include index name with each bookmark
   };
   
   console.log(`Sending to native host for ${bookmark.url}:`);
-  console.log(`  Folder: ${folderName}`);
+  console.log(`  Index: ${indexName}`);
   console.log(`  Content length: ${payload.content.length} chars`);
   
   return sendToNative('index_bookmark', payload);
@@ -158,19 +158,14 @@ async function indexFolder(folderId, folderName, indexName) {
   console.log(`Indexing folder: "${finalFolderName}" (ID: ${folderId})`);
   console.log(`Index name: "${finalIndexName}"`);
   
-  // Send index name to native host
-  await sendToNative('set_context', { 
-    index_name: finalIndexName
-  });
-  console.log(`Index will be created as: ${finalIndexName}`);
-  
   let indexed = 0;
   let failed = 0;
   const total = bookmarks.length;
   
   for (const bookmark of bookmarks) {
     try {
-      await indexBookmark(bookmark, finalFolderName);
+      // Pass index name with each bookmark
+      await indexBookmarkWithIndex(bookmark, finalIndexName);
       indexed++;
       console.log(`[${indexed}/${total}] Indexed: ${bookmark.url}`);
       
@@ -222,7 +217,8 @@ function flattenTree(node, path = []) {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   switch (request.type) {
     case 'index_bookmark':
-      indexBookmark(request.bookmark, 'Manual')
+      // Index with manual index name
+      indexBookmarkWithIndex(request.bookmark, 'Manual_Index')
         .then(result => sendResponse({ success: true, result }))
         .catch(error => sendResponse({ success: false, error: error.message }));
       return true;
