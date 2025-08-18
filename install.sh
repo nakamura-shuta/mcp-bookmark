@@ -155,25 +155,37 @@ EOF
     echo
 }
 
-# Setup MCP configuration
-setup_mcp_config() {
-    echo -e "${BLUE}Setting up MCP configuration...${NC}"
+# Create initial index and setup MCP configuration
+setup_index_and_config() {
+    echo -e "${BLUE}Creating index and MCP configuration...${NC}"
     echo
     
-    # Get initial index name
-    print_info "Choose an initial index name for your bookmarks"
-    echo "  Examples: 'work', 'personal', 'research', 'development'"
-    read -p "Enter index name (default: Extension_Bookmarks): " INDEX_NAME
+    print_info "Now you need to create an index using the Chrome extension:"
+    echo
+    echo "  1. Click the extension icon in Chrome toolbar"
+    echo "  2. Enter an index name (remember this name!)"
+    echo "  3. Select a bookmark folder to index"
+    echo "  4. Click 'Index Selected Folder'"
+    echo "  5. Wait for indexing to complete"
+    echo
+    
+    read -p "Press Enter after you've created the index in Chrome extension..."
+    echo
+    
+    # List available indexes
+    print_info "Checking available indexes..."
+    echo
+    ./target/release/mcp-bookmark --list-indexes
+    echo
+    
+    # Get the index name from user
+    print_info "Enter the exact index name you created in the Chrome extension"
+    echo "  (It should appear in the list above)"
+    read -p "Index name: " INDEX_NAME
     
     if [[ -z "$INDEX_NAME" ]]; then
-        INDEX_NAME="Extension_Bookmarks"
-    fi
-    
-    # Validate index name
-    if [[ ! "$INDEX_NAME" =~ ^[a-zA-Z0-9_]+$ ]]; then
-        print_warning "Index name should only contain letters, numbers, and underscores"
-        INDEX_NAME=$(echo "$INDEX_NAME" | sed 's/[^a-zA-Z0-9_]/_/g')
-        print_info "Using sanitized name: $INDEX_NAME"
+        print_error "Index name is required"
+        exit 1
     fi
     
     # Create local .mcp.json file
@@ -231,10 +243,15 @@ print_next_steps() {
     echo -e "${GREEN}=================================${NC}"
     echo
     echo -e "${BLUE}Next steps:${NC}"
-    echo "1. If you haven't already, load the Chrome extension from chrome://extensions/"
-    echo "2. Click the extension icon in Chrome and create your first index"
-    echo "3. Select a bookmark folder to index"
-    echo "4. Test the MCP server with: INDEX_NAME=\"$INDEX_NAME\" ./target/release/mcp-bookmark"
+    echo "1. Copy .mcp.json to your Claude Code project:"
+    echo "   cp .mcp.json ~/your-project/"
+    echo
+    echo "2. In Claude Code, run: /mcp"
+    echo "3. Select 'mcp-bookmark' to activate"
+    echo "4. Try searching your bookmarks!"
+    echo
+    echo -e "${BLUE}Test the server:${NC}"
+    echo "  INDEX_NAME=\"$INDEX_NAME\" ./target/release/mcp-bookmark"
     echo
     echo -e "${BLUE}Useful commands:${NC}"
     echo "  List all indexes:     ./target/release/mcp-bookmark --list-indexes"
@@ -242,12 +259,13 @@ print_next_steps() {
     echo "  Clear all indexes:    ./target/release/mcp-bookmark --clear-all-indexes"
     echo
     echo -e "${BLUE}Configuration:${NC}"
-    echo "  Local MCP config:     .mcp.json (created with INDEX_NAME: $INDEX_NAME)"
+    echo "  Local MCP config:     .mcp.json (INDEX_NAME: $INDEX_NAME)"
+    echo "  Indexes stored at:    ~/Library/Application Support/mcp-bookmark/"
     echo
-    echo -e "${BLUE}Troubleshooting:${NC}"
-    echo "  - If Chrome extension doesn't work, check the extension ID is correct"
-    echo "  - If the server can't find bookmarks, verify INDEX_NAME matches your created index"
-    echo "  - Run with debug logging: RUST_LOG=debug INDEX_NAME=\"$INDEX_NAME\" ./target/release/mcp-bookmark"
+    echo -e "${BLUE}To index more bookmarks:${NC}"
+    echo "  1. Click the Chrome extension icon"
+    echo "  2. Use the same index name: $INDEX_NAME"
+    echo "  3. Select different folders to add to the index"
     echo
     print_info "For more help, see README.md or README.ja.md"
 }
@@ -257,7 +275,7 @@ main() {
     check_prerequisites
     build_binaries
     setup_extension
-    setup_mcp_config
+    setup_index_and_config
     verify_installation
     print_next_steps
 }

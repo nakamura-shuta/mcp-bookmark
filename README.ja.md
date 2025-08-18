@@ -21,82 +21,52 @@
 
 ## クイックスタート
 
-### 自動インストール（推奨）
-
 ```bash
-# クローンしてセットアップスクリプトを実行
 git clone https://github.com/nakamura-shuta/mcp-bookmark.git
 cd mcp-bookmark
 ./install.sh
 ```
 
-セットアップスクリプトは以下を行います：
+インストールスクリプトが以下の手順をガイドします：
 
-- ✅ 前提条件の確認（macOS、Chrome、Rust）
-- ✅ 必要なバイナリのビルド
-- ✅ Chrome 拡張機能の設定(手動)
-- ✅ ローカル .mcp.json 設定の作成
-- ✅ インストールの検証
+1. **バイナリのビルド** - MCP サーバーとネイティブメッセージングホストをコンパイル
+2. **Chrome 拡張機能のインストール** - 手動でロードして Extension ID を提供
+3. **最初のインデックス作成** - Chrome 拡張機能でブックマークフォルダをインデックス化
+4. **.mcp.json の生成** - 選択したインデックス名で設定ファイルを作成
 
-### 手動インストール
+### 詳細手順
 
-<details>
-<summary>手動インストール手順はこちら</summary>
+#### ステップ 1: インストールスクリプトを実行
+スクリプトがビルドとセットアップをガイドします。
 
-#### 1. サーバーのビルド
+#### ステップ 2: Chrome 拡張機能をインストール（プロンプトが表示されたら）
+1. Chrome で `chrome://extensions/` を開く
+2. 「デベロッパーモード」を有効化（右上）
+3. 「パッケージ化されていない拡張機能を読み込む」をクリック
+4. `mcp-bookmark/bookmark-indexer-extension` フォルダを選択
+5. Extension ID をコピーして、プロンプトに貼り付け
 
-```bash
-# クローンとビルド
-git clone https://github.com/nakamura-shuta/mcp-bookmark.git
-cd mcp-bookmark
-cargo build --release
+#### ステップ 3: 最初のインデックスを作成（プロンプトが表示されたら）
+1. Chrome ツールバーの拡張機能アイコンをクリック
+2. インデックス名を入力（例: "my-bookmarks"）
+3. インデックス化するブックマークフォルダを選択
+4. 「Index Selected Folder」をクリック
+5. 完了を待ってターミナルに戻る
 
-# インストール確認
-./target/release/mcp-bookmark --help
-```
-
-#### 2. Chrome 拡張機能のインストール
-
-1. Native Messaging Host をビルド：
-
+#### ステップ 4: セットアップを完了
+1. 作成したインデックス名を入力
+2. `.mcp.json` をプロジェクトにコピー：
    ```bash
-   cargo build --release --bin mcp-bookmark-native
+   cp .mcp.json ~/your-project/
    ```
 
-2. 拡張機能をインストール - [拡張機能 README](bookmark-indexer-extension/README.md) 参照
-
-3. インデックスの確認：
-   ```bash
-   # 作成されたインデックス一覧を確認
-   ./target/release/mcp-bookmark --list-indexes
-   # 例: work_Development (123 documents, 5.2MB)
+#### ステップ 5: Claude Code で使用
+1. Claude Code で `/mcp` を実行
+2. 「mcp-bookmark」を選択して有効化
+3. 試してみる：
    ```
-
-#### 3. MCP の設定
-
-プロジェクトルートに `.mcp.json` 設定ファイルを作成：
-
-```json
-{
-  "mcpServers": {
-    "mcp-bookmark": {
-      "command": "./target/release/mcp-bookmark",
-      "args": [],
-      "env": {
-        "RUST_LOG": "info",
-        "INDEX_NAME": "your-index-name"
-      }
-    }
-  }
-}
-```
-
-**重要**：
-
-- `your-index-name` を Chrome 拡張機能で作成したインデックス名に置き換えてください
-- `./target/release/mcp-bookmark --list-indexes` で利用可能なインデックスを確認できます
-
-</details>
+   「React hooks のドキュメントをブックマークから検索して」
+   ```
 
 ## 使い方
 

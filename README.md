@@ -21,82 +21,52 @@
 
 ## Quick Start
 
-### Automated Installation (Recommended)
-
 ```bash
-# Clone and run setup script
 git clone https://github.com/nakamura-shuta/mcp-bookmark.git
 cd mcp-bookmark
 ./install.sh
 ```
 
-The setup script will:
+The install script will guide you through:
 
-- ✅ Check prerequisites (macOS, Chrome, Rust)
-- ✅ Build all required binaries
-- ✅ Configure Chrome extension
-- ✅ Create local .mcp.json configuration
-- ✅ Verify installation
+1. **Building the binaries** - Compiles the MCP server and native messaging host
+2. **Installing Chrome extension** - You'll manually load it and provide the Extension ID
+3. **Creating your first index** - Using the Chrome extension to index bookmark folders
+4. **Generating .mcp.json** - With your chosen index name
 
-### Manual Installation
+### Detailed Steps
 
-<details>
-<summary>Click for manual installation steps</summary>
+#### Step 1: Run the Install Script
+The script will build everything and guide you through setup.
 
-#### 1. Build the Server
+#### Step 2: Install Chrome Extension (when prompted)
+1. Open Chrome and go to `chrome://extensions/`
+2. Enable "Developer mode" (top right)
+3. Click "Load unpacked"
+4. Select `mcp-bookmark/bookmark-indexer-extension` folder
+5. Copy the Extension ID and paste it when prompted
 
-```bash
-# Clone and build
-git clone https://github.com/nakamura-shuta/mcp-bookmark.git
-cd mcp-bookmark
-cargo build --release
+#### Step 3: Create Your First Index (when prompted)
+1. Click the extension icon in Chrome toolbar
+2. Enter an index name (e.g., "my-bookmarks")
+3. Select a bookmark folder to index
+4. Click "Index Selected Folder"
+5. Wait for completion, then return to terminal
 
-# Verify installation
-./target/release/mcp-bookmark --help
-```
-
-#### 2. Install Chrome Extension
-
-1. Build the native messaging host:
-
+#### Step 4: Complete Setup
+1. Enter the index name you just created
+2. Copy `.mcp.json` to your project:
    ```bash
-   cargo build --release --bin mcp-bookmark-native
+   cp .mcp.json ~/your-project/
    ```
 
-2. Install the extension - see [Extension README](bookmark-indexer-extension/README.md)
-
-3. Verify index creation:
-   ```bash
-   # List all created indexes
-   ./target/release/mcp-bookmark --list-indexes
-   # Example: work_Development (123 documents, 5.2MB)
+#### Step 5: Use in Claude Code
+1. In Claude Code, run: `/mcp`
+2. Select "mcp-bookmark" to activate
+3. Try it out:
    ```
-
-#### 3. Configure MCP
-
-Create a `.mcp.json` configuration file in the project root:
-
-```json
-{
-  "mcpServers": {
-    "mcp-bookmark": {
-      "command": "./target/release/mcp-bookmark",
-      "args": [],
-      "env": {
-        "RUST_LOG": "info",
-        "INDEX_NAME": "your-index-name"
-      }
-    }
-  }
-}
-```
-
-**Important**:
-
-- Replace `your-index-name` with the index name created by Chrome extension
-- Run `./target/release/mcp-bookmark --list-indexes` to see available indexes
-
-</details>
+   "Search my bookmarks for React hooks documentation"
+   ```
 
 ## Usage
 
