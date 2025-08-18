@@ -216,21 +216,8 @@ function flattenTree(node, path = []) {
 // Message handler
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   switch (request.type) {
-    case 'index_bookmark':
-      // Index with manual index name
-      indexBookmarkWithIndex(request.bookmark, 'Manual_Index')
-        .then(result => sendResponse({ success: true, result }))
-        .catch(error => sendResponse({ success: false, error: error.message }));
-      return true;
-      
     case 'index_folder':
       indexFolder(request.folderId || '0', request.folderName, request.indexName)
-        .then(result => sendResponse({ success: true, result }))
-        .catch(error => sendResponse({ success: false, error: error.message }));
-      return true;
-      
-    case 'clear_index':
-      sendToNative('clear_index', {})
         .then(result => sendResponse({ success: true, result }))
         .catch(error => sendResponse({ success: false, error: error.message }));
       return true;

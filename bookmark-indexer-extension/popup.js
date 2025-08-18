@@ -145,48 +145,6 @@ function setupListeners() {
       }
     });
   });
-  
-  // Index current tab
-  document.getElementById('index-current').addEventListener('click', async () => {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    
-    if (!tab?.url || !tab.url.startsWith('http')) {
-      showStatus('Cannot index this tab', 'error');
-      return;
-    }
-    
-    showStatus('Indexing current tab...', 'info');
-    
-    chrome.runtime.sendMessage({
-      type: 'index_bookmark',
-      bookmark: {
-        id: `tab_${Date.now()}`,
-        url: tab.url,
-        title: tab.title || 'Untitled',
-        folder_path: ['Manual'],
-        dateAdded: Date.now()
-      }
-    }, (response) => {
-      if (response?.success) {
-        showStatus('Tab indexed successfully!', 'success');
-      } else {
-        showStatus(`Error: ${response?.error || 'Unknown error'}`, 'error');
-      }
-    });
-  });
-  
-  // Clear index
-  document.getElementById('clear').addEventListener('click', () => {
-    if (!confirm('Clear the entire index?')) return;
-    
-    chrome.runtime.sendMessage({ type: 'clear_index' }, (response) => {
-      if (response?.success) {
-        showStatus('Index cleared', 'success');
-      } else {
-        showStatus(`Error: ${response?.error || 'Unknown error'}`, 'error');
-      }
-    });
-  });
 }
 
 // Progress bar

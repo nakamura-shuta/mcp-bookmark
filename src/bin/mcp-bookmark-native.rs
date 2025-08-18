@@ -104,8 +104,6 @@ impl NativeMessagingHost {
                 self.index_bookmark(message["params"].clone(), id)
             }
 
-            "clear_index" => self.clear_index(id),
-
             "get_stats" => self.get_index_stats(id),
             
             "list_indexes" => self.list_indexes(id),
@@ -215,58 +213,6 @@ impl NativeMessagingHost {
         // Use update_bookmark which handles deletion of old document
         indexer.update_bookmark(bookmark, content)?;
         Ok(())
-    }
-
-    fn clear_index(&mut self, id: Value) -> Value {
-        let Some(indexer) = &self.indexer else {
-            return json!({
-                "jsonrpc": "2.0",
-                "id": id,
-                "error": {
-                    "code": -32603,
-                    "message": "Tantivy index not initialized"
-                }
-            });
-        };
-
-        match indexer.create_writer(15_000_000) {
-            Ok(mut writer) => {
-                writer.delete_all_documents().ok();
-                match writer.commit() {
-                    Ok(_) => {
-                        log_to_file("Index cleared successfully");
-                        json!({
-                            "jsonrpc": "2.0",
-                            "id": id,
-                            "result": {
-                                "status": "cleared"
-                            }
-                        })
-                    }
-                    Err(e) => {
-                        log_to_file(&format!("Failed to clear index: {e}"));
-                        json!({
-                            "jsonrpc": "2.0",
-                            "id": id,
-                            "error": {
-                                "code": -32603,
-                                "message": format!("Failed to clear index: {}", e)
-                            }
-                        })
-                    }
-                }
-            }
-            Err(e) => {
-                json!({
-                    "jsonrpc": "2.0",
-                    "id": id,
-                    "error": {
-                        "code": -32603,
-                        "message": format!("Failed to create writer: {}", e)
-                    }
-                })
-            }
-        }
     }
 
     fn get_index_stats(&self, id: Value) -> Value {
