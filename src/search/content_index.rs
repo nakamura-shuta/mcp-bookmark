@@ -387,15 +387,15 @@ impl ContentIndexManager {
 #[async_trait]
 impl SearchManagerTrait for ContentIndexManager {
     async fn search(&self, query: &str, limit: usize) -> Result<Vec<SearchResult>> {
-        self.search(query, limit).await
+        ContentIndexManager::search(self, query, limit).await
     }
 
     async fn search_advanced(&self, params: &SearchParams) -> Result<Vec<SearchResult>> {
-        self.search_advanced(params).await
+        ContentIndexManager::search_advanced(self, params).await
     }
 
     async fn get_content_by_url(&self, url: &str) -> Result<Option<String>> {
-        self.get_content_by_url(url).await
+        ContentIndexManager::get_content_by_url(self, url).await
     }
 
     fn get_indexing_status(&self) -> String {

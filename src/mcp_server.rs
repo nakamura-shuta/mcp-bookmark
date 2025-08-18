@@ -106,7 +106,7 @@ impl BookmarkServer {
 
                 // Limit response size for MCP to avoid token limits
                 for result in &mut results {
-                    // Limit snippet text to 300 chars
+                    // Limit snippet text to 300 chars (UTF-8 safe)
                     if result.snippet.len() > 300 {
                         let mut end = 300;
                         while end > 0 && !result.snippet.is_char_boundary(end) {

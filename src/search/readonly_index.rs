@@ -110,21 +110,21 @@ impl ReadOnlyIndexManager {
 #[async_trait]
 impl SearchManagerTrait for ReadOnlyIndexManager {
     async fn search(&self, query: &str, limit: usize) -> Result<Vec<SearchResult>> {
-        self.search(query, limit).await
+        ReadOnlyIndexManager::search(self, query, limit).await
     }
 
     async fn search_advanced(&self, params: &super::SearchParams) -> Result<Vec<SearchResult>> {
         // For read-only index, we can only do simple text search
         // Use query if provided, otherwise return empty results
         if let Some(query) = &params.query {
-            self.search(query, params.limit).await
+            ReadOnlyIndexManager::search(self, query, params.limit).await
         } else {
             Ok(Vec::new())
         }
     }
 
     async fn get_content_by_url(&self, url: &str) -> Result<Option<String>> {
-        self.get_content_by_url(url).await
+        ReadOnlyIndexManager::get_content_by_url(self, url).await
     }
 
     fn get_indexing_status(&self) -> String {

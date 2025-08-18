@@ -79,7 +79,12 @@ impl ScoredSnippetGenerator {
         if let Some(mut best) = snippets.into_iter().next() {
             // Truncate if needed
             if best.text.len() > max_len {
-                best.text.truncate(max_len);
+                // Find safe UTF-8 boundary
+                let mut truncate_pos = max_len;
+                while truncate_pos > 0 && !best.text.is_char_boundary(truncate_pos) {
+                    truncate_pos -= 1;
+                }
+                best.text.truncate(truncate_pos);
                 if !best.text.ends_with("...") {
                     best.text.push_str("...");
                 }
