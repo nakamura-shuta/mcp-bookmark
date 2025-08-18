@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde_json::{Value, json};
 use std::fs::OpenOptions;
 use std::io::{self, Read, Write};
@@ -7,6 +7,12 @@ use std::io::{self, Read, Write};
 use mcp_bookmark::bookmark::FlatBookmark;
 use mcp_bookmark::search::{BookmarkIndexer, BookmarkSchema};
 use tantivy::Index;
+
+// Import Lindera tokenizer
+use lindera_tantivy::tokenizer::LinderaTokenizer;
+use lindera::segmenter::Segmenter;
+use lindera::dictionary::{DictionaryKind, load_dictionary_from_kind};
+use lindera::mode::{Mode, Penalty};
 
 fn log_to_file(msg: &str) {
     if let Ok(mut file) = OpenOptions::new()
@@ -55,8 +61,36 @@ impl NativeMessagingHost {
             Index::create_in_dir(&index_path, schema.schema.clone())?
         };
 
+        // Register Lindera tokenizer for Japanese text processing
+        Self::register_lindera_tokenizer(&index)?;
+
         self.indexer = Some(BookmarkIndexer::new(index, schema));
-        log_to_file(&format!("Tantivy index initialized: {}", self.index_name));
+        log_to_file(&format!("Tantivy index initialized with Lindera tokenizer: {}", self.index_name));
+        Ok(())
+    }
+
+    /// Register Lindera tokenizer for Japanese text
+    fn register_lindera_tokenizer(index: &Index) -> Result<()> {
+        log_to_file("Registering Lindera tokenizer for Japanese text processing");
+        
+        // Load IPADIC dictionary
+        let dictionary = load_dictionary_from_kind(DictionaryKind::IPADIC)
+            .context("Failed to load IPADIC dictionary")?;
+        
+        // Use Decompose mode for better search results
+        let mode = Mode::Decompose(Penalty::default());
+        let user_dictionary = None;
+        
+        // Create Segmenter with the dictionary
+        let segmenter = Segmenter::new(mode, dictionary, user_dictionary);
+        
+        // Create Lindera tokenizer from segmenter
+        let tokenizer = LinderaTokenizer::from_segmenter(segmenter);
+        
+        // Register the tokenizer with name "lang_ja"
+        index.tokenizers().register("lang_ja", tokenizer);
+        
+        log_to_file("Lindera tokenizer registered successfully");
         Ok(())
     }
 
@@ -256,6 +290,9 @@ impl NativeMessagingHost {
 
                             // Count documents (simplified - just check if index can be opened)
                             let doc_count = if let Ok(index) = Index::open_in_dir(&path) {
+                                // Register Lindera tokenizer for the opened index
+                                let _ = Self::register_lindera_tokenizer(&index);
+                                
                                 index
                                     .reader()
                                     .ok()
