@@ -1,188 +1,124 @@
-# Bookmark Indexer - Chrome Extension
+# Bookmark Indexer Chrome Extension
 
-Chrome extension that indexes bookmark content into a local Tantivy search engine for use with the MCP server.
+Chrome extension that indexes bookmark content for the MCP server using local Tantivy search engine.
 
-## Overview
+## Quick Installation
 
-- Fetches content from bookmarked pages
-- Sends content via Native Messaging to `mcp-bookmark-native`
-- Stores in Tantivy index (shared with MCP server)
-- No content size limitations
-
-## Installation
-
-### 1. Build Native Messaging Host
-
+### 1. Build the binaries
 ```bash
 # From project root
 cargo build --release --bin mcp-bookmark-native
 ```
 
-### 2. Configure Native Messaging Host
+### 2. Load the extension in Chrome
+1. Open Chrome and go to `chrome://extensions/`
+2. Enable "Developer mode" (top right)
+3. Click "Load unpacked"
+4. Select the `bookmark-indexer-extension` folder
+5. Copy the Extension ID that appears
 
+### 3. Setup Native Messaging
+Create the configuration file:
 ```bash
-# Create configuration file
+# Replace YOUR_EXTENSION_ID with the ID from step 2
 cat > ~/Library/Application\ Support/Google/Chrome/NativeMessagingHosts/com.mcp_bookmark.json << EOF
 {
   "name": "com.mcp_bookmark",
-  "description": "Bookmark Indexer Native Host",
-  "path": "/path/to/mcp-bookmark/target/release/mcp-bookmark-native",
+  "description": "MCP Bookmark Native Host",
+  "path": "$(pwd)/target/release/mcp-bookmark-native",
   "type": "stdio",
-  "allowed_origins": [
-    "chrome-extension://YOUR_EXTENSION_ID/"
-  ]
+  "allowed_origins": ["chrome-extension://YOUR_EXTENSION_ID/"]
 }
 EOF
 ```
 
-**Important**: Replace `/path/to/mcp-bookmark` with your actual project path.
-
-### 3. Install Chrome Extension
-
-1. Open Chrome and navigate to `chrome://extensions/`
-2. Enable "Developer mode"
-3. Click "Load unpacked"
-4. Select the `/path/to/mcp-bookmark/bookmark-indexer-extension` directory
-5. Note the Extension ID displayed
-
-### 4. Update Native Messaging Host Configuration
-
-```bash
-# Replace YOUR_EXTENSION_ID with the actual ID from Chrome
-EXTENSION_ID="your-actual-extension-id"
-sed -i "" "s/YOUR_EXTENSION_ID/$EXTENSION_ID/g" \
-  ~/Library/Application\ Support/Google/Chrome/NativeMessagingHosts/com.mcp_bookmark.json
-```
-
-### 5. Restart Chrome
-
-A complete Chrome restart is required after configuring Native Messaging Host.
+### 4. Restart Chrome completely (Cmd+Q)
 
 ## Usage
 
-### Indexing Bookmarks
-
+### Creating an Index
 1. Click the extension icon in Chrome toolbar
-2. Select a folder to index from the dropdown
-3. Click "Index Selected Folder"
-4. Monitor progress in the progress bar
+2. Enter an index name (e.g., "work", "personal", "research")
+3. Select a bookmark folder to index
+4. Click "Index Selected Folder"
 5. Wait for "Indexing complete!" message
 
-### Verifying Index Creation
-
-After indexing, verify the index was created:
-
+### Verify the Index
 ```bash
 # List all indexes
 ./target/release/mcp-bookmark --list-indexes
 
-# You should see something like:
-# Extension_YourFolderName (4 documents, 2.5MB)
+# You should see your index listed, e.g.:
+# Extension_work (123 documents, 5.2MB)
 ```
 
-### Features
+## Using with MCP Server
 
-- **Index Selected Folder**: Index all bookmarks in selected folder
-- **Index Current Tab**: Index only the current page
-- **Test Connection**: Verify Native Messaging connection
-- **Clear Index**: Remove current folder's index
-
-## MCP Server Configuration
-
-After creating an index with the Chrome extension, configure your MCP client to use it:
-
-### For Claude Desktop
-
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+After creating an index, configure your MCP client:
 
 ```json
 {
   "mcpServers": {
     "mcp-bookmark": {
-      "command": "/path/to/mcp-bookmark/target/release/mcp-bookmark",
+      "command": "./target/release/mcp-bookmark",
       "env": {
-        "CHROME_PROFILE_NAME": "Extension",
-        "CHROME_TARGET_FOLDER": "YourFolderName"
+        "RUST_LOG": "info",
+        "INDEX_NAME": "Extension_work"
       }
     }
   }
 }
 ```
 
-**Important**: 
-- Replace `/path/to/mcp-bookmark` with your actual project path
-- Replace `YourFolderName` with the exact folder name you indexed
+Replace `Extension_work` with your actual index name from `--list-indexes`.
 
-## Architecture
+## Features
 
-```
-Chrome Extension (popup.js)
-    ↓ Opens tabs & extracts content
-    ↓ Native Messaging
-mcp-bookmark-native (Rust binary)
-    ↓ Tantivy API
-Index Storage (~/Library/Application Support/mcp-bookmark/Extension_FolderName/)
-    ↑ Read by
-mcp-bookmark (MCP Server)
-```
+- **Index Selected Folder** - Index all bookmarks in a folder
+- **Index Current Tab** - Add current page to index
+- **Test Connection** - Verify Native Messaging setup
+- **Clear Index** - Remove the current index
 
-## Index Storage
+## Storage Location
 
 Indexes are stored at:
 ```
-~/Library/Application Support/mcp-bookmark/Extension_[FolderName]/
-```
-
-Each folder creates a separate index that can be used by the MCP server.
-
-## File Structure
-
-```
-bookmark-indexer-extension/
-├── manifest.json     # Extension manifest (Manifest V3)
-├── background.js     # Service Worker for content fetching
-├── popup.html        # Extension popup UI
-├── popup.js          # UI controller and indexing logic
-├── icon.png          # Extension icon
-└── README.md         # This file
+~/Library/Application Support/mcp-bookmark/Extension_[IndexName]/
 ```
 
 ## Troubleshooting
 
 ### "Specified native messaging host not found"
-- Completely restart Chrome (Cmd+Q on macOS)
-- Verify the Native Messaging Host configuration file exists
-- Check the path in the configuration is absolute and correct
+- Restart Chrome completely (Cmd+Q)
+- Verify the path in the JSON config is absolute and correct
+- Check the Extension ID matches
 
-### Connection Errors
-- Verify the binary path is correct and absolute
-- Ensure the extension ID matches in the configuration file
-- Check that the binary has execute permissions
+### Connection test fails
+- Ensure `mcp-bookmark-native` binary exists and is executable
+- Check the path is absolute (starts with `/`)
+- Verify Extension ID in the config file
 
-### Indexing Issues
-- Check Chrome DevTools console in the extension popup for errors
-- Some pages may fail due to CSP or login requirements
-- Notion pages now have special handling with 3-second delay
+### Some pages fail to index
+- Login-required pages work if you're logged in
+- JavaScript-heavy sites may need time to load (3-second delay for Notion)
+- Some sites block content extraction
 
-### Logs
-
+### Check logs
 ```bash
-# Native Messaging logs
+# Native messaging logs
 tail -f /tmp/mcp-bookmark-native.log
 
-# Check index location and size
-ls -la ~/Library/Application\ Support/mcp-bookmark/Extension_*/
-
-# Verify index contents (document count)
+# List indexes
 ./target/release/mcp-bookmark --list-indexes
 ```
 
-## Limitations
+## Architecture
 
-- Cannot fetch content from pages requiring login
-- JavaScript-rendered content may be partially captured
-- Some sites may block content extraction
-- SPAs like Notion have 3-second delay for content loading
+```
+Chrome Extension → Native Messaging → mcp-bookmark-native → Tantivy Index
+                                                               ↑
+                                                        MCP Server reads
+```
 
 ## License
 

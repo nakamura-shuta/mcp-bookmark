@@ -5,6 +5,7 @@
 **Search inside your bookmarked pages with AI** - Index even login-required sites with Chrome extension, enabling fast full-text search
 
 💡 **Key Features**:
+
 - 🔐 **Works with authenticated pages** - Chrome extension fetches content from your logged-in browser
 - ⚡ **Fast local search** - Indexed with Tantivy engine, no external API calls
 - 🎯 **AI-friendly** - Claude can search bookmark contents to answer your questions
@@ -15,12 +16,34 @@
 
 - **Full-Text Search**: Search bookmark content using Tantivy search engine
 - **Chrome Extension**: Index bookmark content directly from browser
-- **Multiple Profiles**: Support for multiple Chrome profiles
+- **Custom Indexes**: Create and manage multiple independent indexes
 - **Folder Filtering**: Expose only specific bookmark folders
 
 ## Quick Start
 
-### 1. Build the Server
+### Automated Installation (Recommended)
+
+```bash
+# Clone and run setup script
+git clone https://github.com/nakamura-shuta/mcp-bookmark.git
+cd mcp-bookmark
+./install.sh
+```
+
+The setup script will:
+
+- ✅ Check prerequisites (macOS, Chrome, Rust)
+- ✅ Build all required binaries
+- ✅ Configure Chrome extension
+- ✅ Create local .mcp.json configuration
+- ✅ Verify installation
+
+### Manual Installation
+
+<details>
+<summary>Click for manual installation steps</summary>
+
+#### 1. Build the Server
 
 ```bash
 # Clone and build
@@ -32,11 +55,10 @@ cargo build --release
 ./target/release/mcp-bookmark --help
 ```
 
-### 2. Install Chrome Extension (Recommended)
-
-The Chrome extension provides better content indexing:
+#### 2. Install Chrome Extension
 
 1. Build the native messaging host:
+
    ```bash
    cargo build --release --bin mcp-bookmark-native
    ```
@@ -47,21 +69,22 @@ The Chrome extension provides better content indexing:
    ```bash
    # List all created indexes
    ./target/release/mcp-bookmark --list-indexes
-   # Example: Extension_Development (123 documents, 5.2MB)
+   # Example: work_Development (123 documents, 5.2MB)
    ```
 
-### 3. Configure MCP
+#### 3. Configure MCP
 
-Add to your Claude Desktop config file (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+Create a `.mcp.json` configuration file in the project root:
 
 ```json
 {
   "mcpServers": {
     "mcp-bookmark": {
-      "command": "/path/to/mcp-bookmark/target/release/mcp-bookmark",
+      "command": "./target/release/mcp-bookmark",
+      "args": [],
       "env": {
-        "CHROME_PROFILE_NAME": "Extension",
-        "CHROME_TARGET_FOLDER": "your-folder-name"
+        "RUST_LOG": "info",
+        "INDEX_NAME": "your-index-name"
       }
     }
   }
@@ -69,28 +92,32 @@ Add to your Claude Desktop config file (`~/Library/Application Support/Claude/cl
 ```
 
 **Important**:
-- Replace `/path/to/mcp-bookmark` with your actual project path
-- Replace `your-folder-name` with the exact folder name you indexed with the Chrome extension
-- `CHROME_PROFILE_NAME` should always be `"Extension"` when using the Chrome extension
+
+- Replace `your-index-name` with the index name created by Chrome extension
+- Run `./target/release/mcp-bookmark --list-indexes` to see available indexes
+
+</details>
 
 ## Usage
 
 ### With Chrome Extension (Recommended)
 
 1. Open the Chrome extension popup
-2. Select a folder to index
-3. Click "Index Selected Folder"
-4. Use the indexed content in your AI assistant
+2. (Optional) Enter a custom index name
+3. Select a folder to index
+4. Click "Index Selected Folder"
+5. Use the indexed content in your AI assistant
 
 ### Command Line Options
 
 ```bash
-# Use pre-built index from Chrome extension
-CHROME_PROFILE_NAME="Extension" CHROME_TARGET_FOLDER="Development" ./target/release/mcp-bookmark
+# Run MCP server with specific index
+INDEX_NAME="work_Development" ./target/release/mcp-bookmark
 
-# Index management
-./target/release/mcp-bookmark --list-indexes
-./target/release/mcp-bookmark --clear-index
+# Index management commands
+./target/release/mcp-bookmark --list-indexes      # List all available indexes
+./target/release/mcp-bookmark --clear-index       # Clear current index
+./target/release/mcp-bookmark --clear-all-indexes # Clear all indexes
 ```
 
 ## MCP Tools Available
@@ -102,24 +129,15 @@ CHROME_PROFILE_NAME="Extension" CHROME_TARGET_FOLDER="Development" ./target/rele
 - `get_bookmark_content` - Get complete content for specific URL
   - Use after search to get full page content
   - No size limitations
-- `list_bookmark_folders` - List available folders
 - `get_indexing_status` - Check indexing progress
-- `get_available_profiles` - List available Chrome profiles
-
-### Search Optimization
-
-The search results are optimized for MCP token limits:
-- Maximum 2 snippets per result (reduced from 5)
-- Maximum 300 characters per snippet (reduced from 400)
-- Legacy fields removed to save space
-- UTF-8 boundary safe truncation for Japanese/multi-byte text
 
 ## Index Storage
 
 Indexes are stored at:
+
 - macOS: `~/Library/Application Support/mcp-bookmark/`
 
-Each profile/folder combination has its own index.
+Each index is managed independently.
 
 ## License
 

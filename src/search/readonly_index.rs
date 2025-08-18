@@ -38,10 +38,10 @@ impl ReadOnlyIndexManager {
             .index_name
             .as_deref()
             .ok_or_else(|| anyhow::anyhow!("INDEX_NAME is required"))?;
-        
+
         Self::new_with_index_name(index_name).await
     }
-    
+
     /// Create new read-only manager with explicit index name
     pub async fn new_with_index_name(index_name: &str) -> Result<Self> {
         let index_dir = dirs::data_dir()

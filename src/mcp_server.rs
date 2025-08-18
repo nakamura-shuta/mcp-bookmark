@@ -60,7 +60,9 @@ impl BookmarkServer {
         resource.no_annotation()
     }
 
-    #[tool(description = "List all available Chrome bookmark folders (not available with INDEX_NAME)")]
+    #[tool(
+        description = "List all available Chrome bookmark folders (not available with INDEX_NAME)"
+    )]
     fn list_bookmark_folders(&self) -> Result<CallToolResult, McpError> {
         Ok(CallToolResult::success(vec![Content::text(
             "Folder listing is not available when using INDEX_NAME. Use search tools to access bookmarks.".to_string()
@@ -162,13 +164,6 @@ impl BookmarkServer {
         let content =
             serde_json::to_string_pretty(&response).unwrap_or_else(|e| format!("Error: {e}"));
         Ok(CallToolResult::success(vec![Content::text(content)]))
-    }
-
-    #[tool(description = "List all available Chrome user profiles (not available with INDEX_NAME)")]
-    fn get_available_profiles(&self) -> Result<CallToolResult, McpError> {
-        Ok(CallToolResult::success(vec![Content::text(
-            "Profile listing is not available when using INDEX_NAME. The index is pre-selected via environment variable.".to_string()
-        )]))
     }
 
     #[tool(
@@ -274,7 +269,8 @@ impl ServerHandler for BookmarkServer {
             // Tree view not available with INDEX_NAME approach
             // Use search tools to access bookmarks
             Err(McpError::resource_not_found(
-                "Bookmark tree is not available when using INDEX_NAME. Use search tools instead.".to_string(),
+                "Bookmark tree is not available when using INDEX_NAME. Use search tools instead."
+                    .to_string(),
                 Some(json!({ "uri": uri })),
             ))
         } else if uri.starts_with("bookmark://folder/") {

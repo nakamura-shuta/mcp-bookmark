@@ -56,10 +56,7 @@ impl NativeMessagingHost {
         };
 
         self.indexer = Some(BookmarkIndexer::new(index, schema));
-        log_to_file(&format!(
-            "Tantivy index initialized: {}",
-            self.index_name
-        ));
+        log_to_file(&format!("Tantivy index initialized: {}", self.index_name));
         Ok(())
     }
 
@@ -87,7 +84,7 @@ impl NativeMessagingHost {
                     self.indexer = None; // Reset indexer to use new index
                     log_to_file(&format!("Index name updated to: {}", self.index_name));
                 }
-                
+
                 // Initialize indexer if needed
                 if self.indexer.is_none() {
                     if let Err(e) = self.init_tantivy() {
@@ -105,7 +102,7 @@ impl NativeMessagingHost {
             }
 
             "get_stats" => self.get_index_stats(id),
-            
+
             "list_indexes" => self.list_indexes(id),
 
             // Legacy MCP methods for compatibility
@@ -237,35 +234,37 @@ impl NativeMessagingHost {
             }
         })
     }
-    
+
     fn list_indexes(&self, id: Value) -> Value {
         let base_path = dirs::data_dir()
             .unwrap_or_else(|| std::path::PathBuf::from("."))
             .join("mcp-bookmark");
-            
+
         let mut indexes = Vec::new();
-        
+
         if let Ok(entries) = std::fs::read_dir(&base_path) {
             for entry in entries.flatten() {
                 if let Ok(metadata) = entry.metadata() {
                     if metadata.is_dir() {
                         let path = entry.path();
                         let name = entry.file_name().to_string_lossy().to_string();
-                        
+
                         // Check if it's a valid index by looking for meta.json
                         if path.join("meta.json").exists() {
                             // Calculate size
                             let size = Self::calculate_dir_size(&path).unwrap_or(0);
-                            
+
                             // Count documents (simplified - just check if index can be opened)
                             let doc_count = if let Ok(index) = Index::open_in_dir(&path) {
-                                index.reader().ok()
+                                index
+                                    .reader()
+                                    .ok()
                                     .map(|reader| reader.searcher().num_docs() as usize)
                                     .unwrap_or(0)
                             } else {
                                 0
                             };
-                            
+
                             indexes.push(json!({
                                 "name": name,
                                 "size": size,
@@ -276,7 +275,7 @@ impl NativeMessagingHost {
                 }
             }
         }
-        
+
         json!({
             "jsonrpc": "2.0",
             "id": id,
@@ -285,7 +284,7 @@ impl NativeMessagingHost {
             }
         })
     }
-    
+
     fn calculate_dir_size(path: &std::path::Path) -> Result<u64> {
         let mut size = 0;
         if let Ok(entries) = std::fs::read_dir(path) {

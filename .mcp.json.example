@@ -1,12 +1,11 @@
 {
   "mcpServers": {
     "mcp-bookmark": {
-      "command": "mcp-bookmark",
+      "command": "./target/release/mcp-bookmark",
       "args": [],
       "env": {
         "RUST_LOG": "info",
-        "CHROME_PROFILE_NAME": "Profile Name",
-        "CHROME_TARGET_FOLDER": "Development"
+        "INDEX_NAME": "your-index-name"
       }
     }
   }

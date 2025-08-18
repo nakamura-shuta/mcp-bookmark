@@ -103,7 +103,17 @@ jobs:
           body: |
             ## Installation
             
-            ### macOS (Intel)
+            ### Quick Setup (Recommended)
+            Clone the repository and run the installation script:
+            ```bash
+            git clone https://github.com/${{ github.repository }}.git
+            cd mcp-bookmark
+            ./install.sh
+            ```
+            
+            ### Manual Binary Download
+            
+            #### macOS (Intel)
             ```bash
             # Download both binaries
             curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/mcp-bookmark-darwin-x64 -o mcp-bookmark
@@ -111,7 +121,7 @@ jobs:
             chmod +x mcp-bookmark mcp-bookmark-native
             ```
             
-            ### macOS (Apple Silicon)
+            #### macOS (Apple Silicon)
             ```bash
             # Download both binaries
             curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/mcp-bookmark-darwin-arm64 -o mcp-bookmark
@@ -135,11 +145,16 @@ jobs:
             
             See [Extension README](https://github.com/${{ github.repository }}/tree/main/bookmark-indexer-extension) for detailed setup
             
-            ### 2. Run MCP Server
+            ### 2. Configure and Run MCP Server
             
             ```bash
-            # Use with Chrome extension index
-            CHROME_PROFILE_NAME="Extension" CHROME_TARGET_FOLDER="YourFolderName" ./mcp-bookmark
+            # List available indexes
+            ./mcp-bookmark --list-indexes
+            
+            # Run with specific index
+            INDEX_NAME="YourIndexName" ./mcp-bookmark
+            
+            # Or create .mcp.json configuration file
             ```
             
             **Features**: 

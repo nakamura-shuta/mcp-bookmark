@@ -152,9 +152,11 @@ impl BookmarkReader {
                 config,
             });
         }
-        
+
         // INDEX_NAME is required
-        anyhow::bail!("INDEX_NAME environment variable is required. Please specify the index to use.")
+        anyhow::bail!(
+            "INDEX_NAME environment variable is required. Please specify the index to use."
+        )
     }
 
     #[cfg(test)]
@@ -186,8 +188,8 @@ impl BookmarkReader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
-    use tempfile::TempDir;
+    
+    
 
     fn create_test_bookmarks() -> ChromeBookmarks {
         ChromeBookmarks {
@@ -276,7 +278,7 @@ mod tests {
         bookmarks
             .roots
             .bookmark_bar
-            .set_folder_paths(vec!["Bookmarks Bar".to_string()]);
+            .set_folder_paths(vec![]);
 
         let flat = bookmarks.roots.bookmark_bar.flatten();
         assert_eq!(flat.len(), 2);
@@ -292,7 +294,7 @@ mod tests {
         bookmarks
             .roots
             .bookmark_bar
-            .set_folder_paths(vec!["Bookmarks Bar".to_string()]);
+            .set_folder_paths(vec![]);
 
         // Find root
         let folder = bookmarks.roots.bookmark_bar.find_folder(&[]);

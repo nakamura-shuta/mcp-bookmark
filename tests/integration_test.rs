@@ -7,12 +7,13 @@ mod tests {
 
     #[test]
     fn test_search_integration() {
-        // Create reader with default config
-        let config = Config::default();
+        // Create reader with index_name set
+        let mut config = Config::default();
+        config.index_name = Some("test_integration_index".to_string());
         let reader = BookmarkReader::with_config(config).unwrap();
 
         // Get all bookmarks
-        let bookmarks = reader.get_all_bookmarks().unwrap();
+        let bookmarks = reader.read_bookmarks().unwrap();
         println!("Found {} bookmarks", bookmarks.len());
 
         // Create search manager and index bookmarks

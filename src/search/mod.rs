@@ -16,7 +16,6 @@ use std::path::{Path, PathBuf};
 use tantivy::{Index, directory::MmapDirectory};
 use tracing::{debug, info};
 
-pub use content_index::ContentIndexManager;
 pub use indexer::BookmarkIndexer;
 pub use schema::BookmarkSchema;
 pub use searcher::{SearchParams, SearchResult};
@@ -54,7 +53,10 @@ impl SearchManager {
     /// Generate index key from config
     pub fn get_index_key(config: &Config) -> String {
         // Use index_name directly if provided
-        config.index_name.clone().unwrap_or_else(|| "default_index".to_string())
+        config
+            .index_name
+            .clone()
+            .unwrap_or_else(|| "default_index".to_string())
     }
 
     /// Get index path from config

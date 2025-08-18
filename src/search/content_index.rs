@@ -413,18 +413,19 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_manager_creation() {
-        // Test configuration
-        let config = crate::config::Config::default();
+        // Test configuration with index_name set
+        let mut config = crate::config::Config::default();
+        config.index_name = Some("test_index".to_string());
         let reader = Arc::new(BookmarkReader::with_config(config).unwrap());
         let fetcher = Arc::new(ContentFetcher::new().unwrap());
 
         // Create search manager
         let manager = ContentIndexManager::new(reader, fetcher).await.unwrap();
 
-        // Check index building status
-        assert!(!manager.is_indexing_complete());
+        // When using pre-built index (index_name is set), it should be complete immediately
+        assert!(manager.is_indexing_complete());
         let status = manager.get_indexing_status();
-        assert!(status.contains("Building index") || status.contains("Index build"));
+        assert!(status.contains("complete") || status.contains("ready"));
     }
 
     #[tokio::test]

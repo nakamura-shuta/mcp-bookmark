@@ -11,7 +11,7 @@ use content::ContentFetcher;
 use mcp_server::BookmarkServer;
 use rmcp::{ServiceExt, transport::stdio};
 use search::{
-    ContentIndexManager, readonly_index::ReadOnlyIndexManager,
+    readonly_index::ReadOnlyIndexManager,
     search_manager_trait::SearchManagerTrait,
 };
 use std::env;
@@ -115,7 +115,7 @@ fn list_available_indexes() {
                     // Check if it's a valid index
                     if path.join("meta.json").exists() {
                         found = true;
-                        println!("  - {}", name);
+                        println!("  - {name}");
                     }
                 }
             }
@@ -204,12 +204,12 @@ fn clear_index(index_name: Option<&str>) {
     let index_dir = base_dir.join(name);
 
     if !index_dir.exists() {
-        println!("Index not found: {}", name);
+        println!("Index not found: {name}");
         return;
     }
 
     match std::fs::remove_dir_all(&index_dir) {
-        Ok(_) => println!("Index cleared: {}", name),
+        Ok(_) => println!("Index cleared: {name}"),
         Err(e) => println!("Failed to clear index: {e}"),
     }
 }
@@ -324,16 +324,20 @@ async fn main() -> Result<()> {
     // Initialize search manager (always use read-only mode for pre-built indexes)
     tracing::debug!("Initializing search index...");
 
-    let search_manager: Arc<dyn SearchManagerTrait> = 
-        match ReadOnlyIndexManager::new_with_index_name(config.index_name.as_deref().unwrap()).await {
+    let search_manager: Arc<dyn SearchManagerTrait> =
+        match ReadOnlyIndexManager::new_with_index_name(config.index_name.as_deref().unwrap()).await
+        {
             Ok(manager) => {
                 tracing::info!("Using index in read-only mode (lock-free)");
                 Arc::new(manager)
             }
             Err(e) => {
                 tracing::error!("Failed to open index: {}", e);
-                eprintln!("Error: Failed to open index '{}': {}", 
-                    config.index_name.as_deref().unwrap_or(""), e);
+                eprintln!(
+                    "Error: Failed to open index '{}': {}",
+                    config.index_name.as_deref().unwrap_or(""),
+                    e
+                );
                 eprintln!("\nPlease check:");
                 eprintln!("  1. The index exists (use --list-indexes to see available indexes)");
                 eprintln!("  2. The index was created using the Chrome extension");
