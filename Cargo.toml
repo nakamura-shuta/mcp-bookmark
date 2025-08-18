@@ -19,6 +19,8 @@ tracing-appender = "0.2"
 url = "2.5"
 dirs = "5.0"
 tantivy = "0.24"
+lindera = "0.45"
+lindera-tantivy = { version = "0.45", features = ["ipadic"] }
 readability = "0.3"
 async-trait = "0.1.89"
 

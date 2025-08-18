@@ -160,6 +160,19 @@ mod tests {
         let schema = BookmarkSchema::new();
         let dir = MmapDirectory::open(temp_dir.path()).unwrap();
         let index = Index::create(dir, schema.schema.clone(), Default::default()).unwrap();
+
+        // Register Lindera tokenizer for tests
+        use lindera::dictionary::{DictionaryKind, load_dictionary_from_kind};
+        use lindera::mode::{Mode, Penalty};
+        use lindera::segmenter::Segmenter;
+        use lindera_tantivy::tokenizer::LinderaTokenizer;
+
+        let dictionary = load_dictionary_from_kind(DictionaryKind::IPADIC).unwrap();
+        let mode = Mode::Decompose(Penalty::default());
+        let segmenter = Segmenter::new(mode, dictionary, None);
+        let tokenizer = LinderaTokenizer::from_segmenter(segmenter);
+        index.tokenizers().register("lang_ja", tokenizer);
+
         (index, schema, temp_dir)
     }
 

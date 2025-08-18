@@ -9,6 +9,10 @@ pub mod snippet;
 pub mod unified_searcher;
 
 use anyhow::{Context, Result};
+use lindera::dictionary::{DictionaryKind, load_dictionary_from_kind};
+use lindera::mode::{Mode, Penalty};
+use lindera::segmenter::Segmenter;
+use lindera_tantivy::tokenizer::LinderaTokenizer;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tantivy::{Index, directory::MmapDirectory};
@@ -115,7 +119,10 @@ impl SearchManager {
                 }
             }
 
-            Index::open_in_dir(&index_path).context("Failed to open existing index")?
+            let index = Index::open_in_dir(&index_path).context("Failed to open existing index")?;
+            // Register Lindera tokenizer for existing index
+            Self::register_lindera_tokenizer(&index)?;
+            index
         } else {
             info!("Creating new index: {:?}", index_path);
 
@@ -125,8 +132,14 @@ impl SearchManager {
 
             let mmap_directory =
                 MmapDirectory::open(&index_path).context("Failed to open index directory")?;
-            Index::create(mmap_directory, schema.schema.clone(), Default::default())
-                .context("Failed to create new index")?
+
+            // Create index with default settings
+            let index = Index::create(mmap_directory, schema.schema.clone(), Default::default())
+                .context("Failed to create new index")?;
+
+            // Register Lindera tokenizer for new index
+            Self::register_lindera_tokenizer(&index)?;
+            index
         };
 
         let indexer = BookmarkIndexer::new(index.clone(), schema.clone());
@@ -141,6 +154,31 @@ impl SearchManager {
             index_path,
             writer,
         })
+    }
+
+    /// Register Lindera tokenizer for Japanese text
+    fn register_lindera_tokenizer(index: &Index) -> Result<()> {
+        debug!("Registering Lindera tokenizer for Japanese text processing");
+
+        // Load IPADIC dictionary
+        let dictionary = load_dictionary_from_kind(DictionaryKind::IPADIC)
+            .context("Failed to load IPADIC dictionary")?;
+
+        // Use Decompose mode for better search results
+        let mode = Mode::Decompose(Penalty::default());
+        let user_dictionary = None;
+
+        // Create Segmenter with the dictionary
+        let segmenter = Segmenter::new(mode, dictionary, user_dictionary);
+
+        // Create Lindera tokenizer from segmenter
+        let tokenizer = LinderaTokenizer::from_segmenter(segmenter);
+
+        // Register the tokenizer with name "lang_ja"
+        index.tokenizers().register("lang_ja", tokenizer);
+
+        info!("Lindera tokenizer registered successfully");
+        Ok(())
     }
 
     /// Write index metadata
@@ -190,6 +228,8 @@ impl SearchManager {
     pub fn commit(&mut self) -> Result<()> {
         if let Some(ref mut writer) = self.writer {
             writer.commit()?;
+            // Reload searcher to see new changes
+            self.searcher.reload()?;
         }
         Ok(())
     }

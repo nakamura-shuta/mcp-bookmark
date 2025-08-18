@@ -1,4 +1,8 @@
 use anyhow::{Context, Result};
+use lindera::dictionary::{DictionaryKind, load_dictionary_from_kind};
+use lindera::mode::{Mode, Penalty};
+use lindera::segmenter::Segmenter;
+use lindera_tantivy::tokenizer::LinderaTokenizer;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use tantivy::{
@@ -8,7 +12,7 @@ use tantivy::{
     query::{BooleanQuery, BoostQuery, Occur, Query, QueryParser, TermQuery},
     schema::Value,
 };
-use tracing::debug;
+use tracing::{debug, info};
 
 use super::schema::BookmarkSchema;
 use super::scored_snippet::ScoredSnippetGenerator;
@@ -33,6 +37,8 @@ impl std::fmt::Debug for UnifiedSearcher {
 impl UnifiedSearcher {
     /// Create a new searcher with read-write access
     pub fn new(index: Index, schema: BookmarkSchema) -> Result<Self> {
+        // Note: Lindera tokenizer is already registered in SearchManager
+
         let reader = index
             .reader_builder()
             .reload_policy(tantivy::ReloadPolicy::OnCommitWithDelay)
@@ -61,7 +67,35 @@ impl UnifiedSearcher {
         let index = Index::open(mmap_directory).context("Failed to open index")?;
         let schema = BookmarkSchema::new();
 
+        // Register Lindera tokenizer for read-only index
+        Self::register_lindera_tokenizer(&index)?;
+
         Self::new(index, schema)
+    }
+
+    /// Register Lindera tokenizer for Japanese text
+    fn register_lindera_tokenizer(index: &Index) -> Result<()> {
+        debug!("Registering Lindera tokenizer for Japanese text processing");
+
+        // Load IPADIC dictionary
+        let dictionary = load_dictionary_from_kind(DictionaryKind::IPADIC)
+            .context("Failed to load IPADIC dictionary")?;
+
+        // Use Decompose mode for better search results
+        let mode = Mode::Decompose(Penalty::default());
+        let user_dictionary = None;
+
+        // Create Segmenter with the dictionary
+        let segmenter = Segmenter::new(mode, dictionary, user_dictionary);
+
+        // Create Lindera tokenizer from segmenter
+        let tokenizer = LinderaTokenizer::from_segmenter(segmenter);
+
+        // Register the tokenizer with name "lang_ja"
+        index.tokenizers().register("lang_ja", tokenizer);
+
+        info!("Lindera tokenizer registered successfully");
+        Ok(())
     }
 
     /// Reload the index reader to see new changes

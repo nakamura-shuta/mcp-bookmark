@@ -1,4 +1,6 @@
-use tantivy::schema::{FAST, Field, STORED, STRING, Schema, TEXT};
+use tantivy::schema::{
+    FAST, Field, IndexRecordOption, STORED, STRING, Schema, TextFieldIndexing, TextOptions,
+};
 
 /// Bookmark index schema definition
 #[derive(Clone, Debug)]
@@ -25,11 +27,20 @@ impl BookmarkSchema {
         // URL field (stored as string for exact match)
         let url = builder.add_text_field("url", STRING | STORED);
 
-        // Title field (stored and indexed with higher weight)
-        let title = builder.add_text_field("title", TEXT | STORED);
+        // Configure text options with Lindera tokenizer for Japanese text
+        let text_field_indexing = TextFieldIndexing::default()
+            .set_tokenizer("lang_ja") // Use Lindera tokenizer with standard name
+            .set_index_option(IndexRecordOption::WithFreqsAndPositions);
 
-        // Content field (indexed and stored for full-text search and retrieval)
-        let content = builder.add_text_field("content", TEXT | STORED);
+        let text_options = TextOptions::default()
+            .set_indexing_options(text_field_indexing)
+            .set_stored();
+
+        // Title field (stored and indexed with Lindera tokenizer)
+        let title = builder.add_text_field("title", text_options.clone());
+
+        // Content field (indexed and stored for full-text search with Lindera tokenizer)
+        let content = builder.add_text_field("content", text_options);
 
         // Folder path for filtering (stored as string)
         let folder_path = builder.add_text_field("folder_path", STRING | STORED);
