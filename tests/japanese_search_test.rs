@@ -49,9 +49,24 @@ mod japanese_search_tests {
             ),
         ];
 
+        // Create content map for indexing
+        let mut content_map = std::collections::HashMap::new();
+        content_map.insert(
+            "https://example.com/1".to_string(),
+            "石川さんの出社日について確認します。基本的に平日はSlack OK。".to_string(),
+        );
+        content_map.insert(
+            "https://example.com/2".to_string(),
+            "明日の会議は石川さんも参加予定です。".to_string(),
+        );
+        content_map.insert(
+            "https://example.com/3".to_string(),
+            "来週から新しいプロジェクトが始まります。出社は必須ではありません。".to_string(),
+        );
+
         // Build index with Japanese content
-        manager.build_index(&bookmarks).unwrap();
-        manager.commit().unwrap();
+        manager.index_bookmarks_with_content(&bookmarks, &content_map).unwrap();
+        manager.reload().unwrap(); // Ensure searcher sees new content
 
         // Test 1: Search with space-separated terms
         let results = manager.search("石川 出社", 10).unwrap();
@@ -104,8 +119,23 @@ mod japanese_search_tests {
             create_japanese_bookmark("3", "API仕様書", "REST APIの仕様書です。"),
         ];
 
-        manager.build_index(&bookmarks).unwrap();
-        manager.commit().unwrap();
+        // Create content map for indexing
+        let mut content_map = std::collections::HashMap::new();
+        content_map.insert(
+            "https://example.com/1".to_string(),
+            "サーバーの設定について説明します。Server configuration guide.".to_string(),
+        );
+        content_map.insert(
+            "https://example.com/2".to_string(),
+            "Database connection の設定方法。".to_string(),
+        );
+        content_map.insert(
+            "https://example.com/3".to_string(),
+            "REST APIの仕様書です。".to_string(),
+        );
+
+        manager.index_bookmarks_with_content(&bookmarks, &content_map).unwrap();
+        manager.reload().unwrap(); // Ensure searcher sees new content
 
         // Test mixed language search
         let results = manager.search("サーバー configuration", 10).unwrap();
@@ -143,8 +173,23 @@ mod japanese_search_tests {
             create_japanese_bookmark("3", "京都観光", "京都の観光スポット紹介。"),
         ];
 
-        manager.build_index(&bookmarks).unwrap();
-        manager.commit().unwrap();
+        // Create content map for indexing
+        let mut content_map = std::collections::HashMap::new();
+        content_map.insert(
+            "https://example.com/1".to_string(),
+            "東京都の今日の天気は晴れです。".to_string(),
+        );
+        content_map.insert(
+            "https://example.com/2".to_string(),
+            "東京で開催されたオリンピック。".to_string(),
+        );
+        content_map.insert(
+            "https://example.com/3".to_string(),
+            "京都の観光スポット紹介。".to_string(),
+        );
+
+        manager.index_bookmarks_with_content(&bookmarks, &content_map).unwrap();
+        manager.reload().unwrap(); // Ensure searcher sees new content
 
         // Test compound word tokenization
         let results = manager.search("東京", 10).unwrap();
