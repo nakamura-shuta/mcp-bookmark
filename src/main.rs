@@ -1,5 +1,4 @@
 mod bookmark;
-mod chrome_profile;
 mod config;
 mod content;
 mod mcp_server;
@@ -41,8 +40,10 @@ fn parse_args() -> Result<Config> {
             "--clear-index" => {
                 if i + 1 < args.len() {
                     clear_index(Some(&args[i + 1]));
+                    i += 1;
                 } else {
-                    clear_index(None);
+                    println!("Error: --clear-index requires an index name");
+                    std::process::exit(1);
                 }
                 std::process::exit(0);
             }
@@ -50,46 +51,29 @@ fn parse_args() -> Result<Config> {
                 clear_all_indexes();
                 std::process::exit(0);
             }
-            "--profile" if i + 1 < args.len() => {
-                config.profile_name = Some(args[i + 1].clone());
-                i += 2;
-                continue;
-            }
-            "--folder" if i + 1 < args.len() => {
-                config.target_folder = Some(args[i + 1].clone());
-                i += 2;
-                continue;
-            }
-            "--exclude" if i + 1 < args.len() => {
-                config.exclude_folders = parse_folder_argument(&args[i + 1]);
-                i += 2;
-                continue;
-            }
             _ => {
                 // Try to parse as number (max bookmarks)
                 if let Ok(max) = arg.parse::<usize>() {
                     config.max_bookmarks = max;
-                } else if i == 1 && !arg.starts_with('-') {
-                    // First non-flag argument is folder name(s)
-                    config.include_folders = parse_folder_argument(arg);
                 }
             }
         }
         i += 1;
     }
 
-    // Also read from environment variables
-    if config.profile_name.is_none() {
-        config.profile_name = env::var("CHROME_PROFILE_NAME").ok();
-    }
-    if config.target_folder.is_none() {
-        if let Ok(folder) = env::var("CHROME_TARGET_FOLDER") {
-            tracing::info!("CHROME_TARGET_FOLDER environment variable: {}", folder);
-            eprintln!("DEBUG: CHROME_TARGET_FOLDER environment variable found: {folder}");
-            config.target_folder = Some(folder);
-        } else {
-            tracing::debug!("CHROME_TARGET_FOLDER not set in environment");
-        }
+    // Read INDEX_NAME from environment variable (required)
+    if let Ok(index_name) = env::var("INDEX_NAME") {
+        tracing::info!("Using index: {}", index_name);
+        config.index_name = Some(index_name);
+    } else {
+        eprintln!("Error: INDEX_NAME environment variable is required");
+        eprintln!();
+        eprintln!("Please specify the index to use:");
+        eprintln!("  export INDEX_NAME=your_index_name");
+        eprintln!();
+        eprintln!("Available indexes:");
+        list_available_indexes();
+        std::process::exit(1);
     }
 
     Ok(config)
@@ -97,24 +81,50 @@ fn parse_args() -> Result<Config> {
 
 /// Print help message
 fn print_help() {
-    println!("Chrome Bookmark MCP Server\n");
+    println!("Chrome Bookmark MCP Server (Simplified)\n");
     println!("Usage: mcp-bookmark [options]\n");
-    println!("Examples:");
-    println!("  mcp-bookmark                    # All bookmarks");
-    println!("  mcp-bookmark Development         # Only Development folder");
-    println!("  mcp-bookmark Development 10      # Max 10 bookmarks from Development");
-    println!("  mcp-bookmark Work,Tech 20        # Max 20 bookmarks from Work and Tech\n");
-    println!("Advanced options:");
-    println!("  --profile <name>     Chrome profile name (e.g., 'Work' or 'Profile 1')");
-    println!("  --folder <name>      Target folder name (language independent)");
-    println!("  --exclude <folders>  Exclude specified folders\n");
-    println!("Index management:");
-    println!("  --list-indexes       List all available indexes");
-    println!("  --clear-index [key]  Clear specific index (or current if no key)");
-    println!("  --clear-all-indexes  Clear all indexes\n");
     println!("Environment variables:");
-    println!("  CHROME_PROFILE_NAME  Chrome profile name");
-    println!("  CHROME_TARGET_FOLDER Target folder name");
+    println!("  INDEX_NAME       Name of the index to use (required)\n");
+    println!("Options:");
+    println!("  --help, -h            Show this help message");
+    println!("  --list-indexes        List all available indexes");
+    println!("  --clear-index <name>  Clear specific index");
+    println!("  --clear-all-indexes   Clear all indexes\n");
+    println!("Examples:");
+    println!("  INDEX_NAME=my_work_bookmarks mcp-bookmark");
+    println!("  INDEX_NAME=Extension_Development mcp-bookmark");
+}
+
+/// List available indexes (simplified output)
+fn list_available_indexes() {
+    let base_dir = dirs::data_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("mcp-bookmark");
+
+    if !base_dir.exists() {
+        println!("  No indexes found. Use the Chrome extension to create one.");
+        return;
+    }
+
+    let mut found = false;
+    if let Ok(entries) = std::fs::read_dir(&base_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() && path.file_name().unwrap() != "logs" {
+                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                    // Check if it's a valid index
+                    if path.join("meta.json").exists() {
+                        found = true;
+                        println!("  - {}", name);
+                    }
+                }
+            }
+        }
+    }
+
+    if !found {
+        println!("  No indexes found. Use the Chrome extension to create one.");
+    }
 }
 
 /// List all available indexes
@@ -137,36 +147,39 @@ fn list_indexes() {
             let path = entry.path();
             if path.is_dir() && path.file_name().unwrap() != "logs" {
                 if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                    found = true;
-                    print!("  {name}");
+                    // Check if it's a valid index
+                    if path.join("meta.json").exists() {
+                        found = true;
+                        print!("  {name}");
 
-                    // Read metadata if exists
-                    let meta_path = path.join("meta.json");
-                    if let Ok(content) = std::fs::read_to_string(meta_path) {
-                        if let Ok(meta) = serde_json::from_str::<serde_json::Value>(&content) {
-                            if let Some(count) = meta["bookmark_count"].as_u64() {
-                                print!(" ({count} bookmarks");
+                        // Read metadata if exists
+                        let meta_path = path.join("meta.json");
+                        if let Ok(content) = std::fs::read_to_string(meta_path) {
+                            if let Ok(meta) = serde_json::from_str::<serde_json::Value>(&content) {
+                                if let Some(count) = meta["bookmark_count"].as_u64() {
+                                    print!(" ({count} bookmarks");
+                                }
+                                if let Some(updated) = meta["last_updated"].as_str() {
+                                    print!(", updated: {updated}");
+                                }
+                                print!(")");
                             }
-                            if let Some(updated) = meta["last_updated"].as_str() {
-                                print!(", updated: {updated}");
-                            }
-                            print!(")");
                         }
-                    }
 
-                    // Show size
-                    if let Ok(size) = get_dir_size(&path) {
-                        let (size_str, unit) = if size < 1024 {
-                            (size as f64, "B")
-                        } else if size < 1024 * 1024 {
-                            (size as f64 / 1024.0, "KB")
-                        } else {
-                            (size as f64 / 1024.0 / 1024.0, "MB")
-                        };
-                        print!(" [{size_str:.1}{unit}]");
-                    }
+                        // Show size
+                        if let Ok(size) = get_dir_size(&path) {
+                            let (size_str, unit) = if size < 1024 {
+                                (size as f64, "B")
+                            } else if size < 1024 * 1024 {
+                                (size as f64 / 1024.0, "KB")
+                            } else {
+                                (size as f64 / 1024.0 / 1024.0, "MB")
+                            };
+                            print!(" [{size_str:.1}{unit}]");
+                        }
 
-                    println!();
+                        println!();
+                    }
                 }
             }
         }
@@ -178,27 +191,25 @@ fn list_indexes() {
 }
 
 /// Clear specific index
-fn clear_index(key: Option<&str>) {
+fn clear_index(index_name: Option<&str>) {
+    let Some(name) = index_name else {
+        println!("Error: Index name is required");
+        return;
+    };
+
     let base_dir = dirs::data_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("mcp-bookmark");
 
-    let index_dir = if let Some(k) = key {
-        base_dir.join(k)
-    } else {
-        // Use current config to determine index
-        let config = parse_args().unwrap_or_default();
-        let key = search::SearchManager::get_index_key(&config);
-        base_dir.join(key)
-    };
+    let index_dir = base_dir.join(name);
 
     if !index_dir.exists() {
-        println!("Index not found: {index_dir:?}");
+        println!("Index not found: {}", name);
         return;
     }
 
     match std::fs::remove_dir_all(&index_dir) {
-        Ok(_) => println!("Index cleared: {index_dir:?}"),
+        Ok(_) => println!("Index cleared: {}", name),
         Err(e) => println!("Failed to clear index: {e}"),
     }
 }
@@ -246,27 +257,6 @@ fn get_dir_size(path: &std::path::Path) -> Result<u64> {
         }
     }
     Ok(size)
-}
-
-/// Parse folder argument into folder paths
-/// Handles both simple folder names and full paths
-fn parse_folder_argument(arg: &str) -> Vec<Vec<String>> {
-    arg.split(',')
-        .map(|folder_name| {
-            if !folder_name.contains('/') {
-                // Simple folder name: assume under "Bookmarks Bar" with Japanese support
-                // This handles Japanese Chrome where bookmark bar is named "ブックマーク バー"
-                vec![
-                    "Bookmarks Bar".to_string(),
-                    "ブックマーク バー".to_string(),
-                    folder_name.to_string(),
-                ]
-            } else {
-                // Full path provided
-                folder_name.split('/').map(String::from).collect()
-            }
-        })
-        .collect()
 }
 
 #[tokio::main]
@@ -319,18 +309,9 @@ async fn main() -> Result<()> {
     // Parse command-line arguments
     let config = parse_args()?;
 
-    tracing::info!("Starting Chrome Bookmark MCP Server");
-    if let Some(profile_name) = &config.profile_name {
-        tracing::debug!("Using profile: {}", profile_name);
-    }
-    if let Some(target_folder) = &config.target_folder {
-        tracing::debug!("Target folder: {}", target_folder);
-    }
-    if !config.include_folders.is_empty() {
-        tracing::debug!("Including folders: {:?}", config.include_folders);
-    }
-    if !config.exclude_folders.is_empty() {
-        tracing::debug!("Excluding folders: {:?}", config.exclude_folders);
+    tracing::info!("Starting Chrome Bookmark MCP Server (Simplified)");
+    if let Some(index_name) = &config.index_name {
+        tracing::info!("Using index: {}", index_name);
     }
     if config.max_bookmarks > 0 {
         tracing::debug!("Max bookmarks: {}", config.max_bookmarks);
@@ -340,29 +321,26 @@ async fn main() -> Result<()> {
     let reader = Arc::new(BookmarkReader::with_config(config.clone())?);
     let fetcher = Arc::new(ContentFetcher::new()?);
 
-    // Initialize search manager
+    // Initialize search manager (always use read-only mode for pre-built indexes)
     tracing::debug!("Initializing search index...");
 
-    // Check if using Chrome extension index (use read-only mode)
-    let using_chrome_extension = config.profile_name.is_some() && config.target_folder.is_some();
-
-    let search_manager: Arc<dyn SearchManagerTrait> = if using_chrome_extension {
-        tracing::info!("Using Chrome extension index in read-only mode (lock-free)");
-        // Use read-only manager for Chrome extension indexes
-        match ReadOnlyIndexManager::new(reader.clone()).await {
-            Ok(manager) => Arc::new(manager),
-            Err(e) => {
-                tracing::warn!(
-                    "Failed to open read-only index: {}. Falling back to normal mode.",
-                    e
-                );
-                Arc::new(ContentIndexManager::new(reader.clone(), fetcher.clone()).await?)
+    let search_manager: Arc<dyn SearchManagerTrait> = 
+        match ReadOnlyIndexManager::new_with_index_name(config.index_name.as_deref().unwrap()).await {
+            Ok(manager) => {
+                tracing::info!("Using index in read-only mode (lock-free)");
+                Arc::new(manager)
             }
-        }
-    } else {
-        // Use normal manager for regular bookmarks
-        Arc::new(ContentIndexManager::new(reader.clone(), fetcher.clone()).await?)
-    };
+            Err(e) => {
+                tracing::error!("Failed to open index: {}", e);
+                eprintln!("Error: Failed to open index '{}': {}", 
+                    config.index_name.as_deref().unwrap_or(""), e);
+                eprintln!("\nPlease check:");
+                eprintln!("  1. The index exists (use --list-indexes to see available indexes)");
+                eprintln!("  2. The index was created using the Chrome extension");
+                eprintln!("  3. The index name is correct");
+                std::process::exit(1);
+            }
+        };
 
     tracing::info!("Server ready");
     tracing::info!("{}", search_manager.get_indexing_status());

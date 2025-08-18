@@ -60,18 +60,11 @@ impl BookmarkServer {
         resource.no_annotation()
     }
 
-    #[tool(description = "List all available Chrome bookmark folders in the current profile")]
+    #[tool(description = "List all available Chrome bookmark folders (not available with INDEX_NAME)")]
     fn list_bookmark_folders(&self) -> Result<CallToolResult, McpError> {
-        match self.reader.list_filtered_folders() {
-            Ok(folders) => {
-                let content = serde_json::to_string_pretty(&folders)
-                    .unwrap_or_else(|e| format!("Error serializing folders: {e}"));
-                Ok(CallToolResult::success(vec![Content::text(content)]))
-            }
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
-                "Error listing folders: {e}"
-            ))])),
-        }
+        Ok(CallToolResult::success(vec![Content::text(
+            "Folder listing is not available when using INDEX_NAME. Use search tools to access bookmarks.".to_string()
+        )]))
     }
 
     #[tool(
@@ -171,50 +164,11 @@ impl BookmarkServer {
         Ok(CallToolResult::success(vec![Content::text(content)]))
     }
 
-    #[tool(description = "List all available Chrome user profiles with bookmark counts and sizes")]
+    #[tool(description = "List all available Chrome user profiles (not available with INDEX_NAME)")]
     fn get_available_profiles(&self) -> Result<CallToolResult, McpError> {
-        use crate::chrome_profile::ProfileResolver;
-
-        match ProfileResolver::new() {
-            Ok(resolver) => {
-                match resolver.list_all_profiles() {
-                    Ok(profiles) => {
-                        // Get current profile
-                        let current_profile = resolver.get_current_profile();
-                        let current_dir = current_profile.as_ref().map(|p| &p.directory_name);
-
-                        let profile_list: Vec<_> = profiles
-                            .iter()
-                            .map(|p| {
-                                json!({
-                                    "display_name": p.display_name,
-                                    "directory_name": p.directory_name,
-                                    "bookmark_count": p.bookmark_count,
-                                    "size_kb": p.size_kb,
-                                    "is_current": Some(&p.directory_name) == current_dir,
-                                    "path": p.path.to_string_lossy(),
-                                })
-                            })
-                            .collect();
-
-                        let response = json!({
-                            "profiles": profile_list,
-                            "total": profiles.len(),
-                        });
-
-                        let content = serde_json::to_string_pretty(&response)
-                            .unwrap_or_else(|e| format!("Error: {e}"));
-                        Ok(CallToolResult::success(vec![Content::text(content)]))
-                    }
-                    Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
-                        "Error listing profiles: {e}"
-                    ))])),
-                }
-            }
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
-                "Error initializing profile resolver: {e}"
-            ))])),
-        }
+        Ok(CallToolResult::success(vec![Content::text(
+            "Profile listing is not available when using INDEX_NAME. The index is pre-selected via environment variable.".to_string()
+        )]))
     }
 
     #[tool(
@@ -302,19 +256,8 @@ impl ServerHandler for BookmarkServer {
             "Full Chrome bookmark tree",
         ));
 
-        // Resource: bookmark://folder/{path} for each folder
-        if let Ok(folders) = self.reader.list_filtered_folders() {
-            for folder_path in folders {
-                let uri = format!("bookmark://folder/{}", folder_path.join("/"));
-                let name = folder_path.last().unwrap_or(&"Unknown".to_string()).clone();
-
-                resources.push(self._create_resource(
-                    &uri,
-                    &format!("Folder: {name}"),
-                    &format!("Bookmarks in {} folder", folder_path.join("/")),
-                ));
-            }
-        }
+        // Folder resources not available with INDEX_NAME approach
+        // All bookmarks are accessed through search tools
 
         Ok(ListResourcesResult {
             resources,
@@ -328,40 +271,18 @@ impl ServerHandler for BookmarkServer {
         _context: RequestContext<RoleServer>,
     ) -> Result<ReadResourceResult, McpError> {
         if uri == "bookmark://tree" {
-            // Return filtered bookmarks
-            match self.reader.get_all_bookmarks() {
-                Ok(bookmarks) => {
-                    let content = serde_json::to_string_pretty(&bookmarks)
-                        .map_err(|e| McpError::internal_error(e.to_string(), None))?;
-
-                    Ok(ReadResourceResult {
-                        contents: vec![ResourceContents::text(content, uri)],
-                    })
-                }
-                Err(e) => Err(McpError::resource_not_found(
-                    e.to_string(),
-                    Some(json!({ "uri": uri })),
-                )),
-            }
+            // Tree view not available with INDEX_NAME approach
+            // Use search tools to access bookmarks
+            Err(McpError::resource_not_found(
+                "Bookmark tree is not available when using INDEX_NAME. Use search tools instead.".to_string(),
+                Some(json!({ "uri": uri })),
+            ))
         } else if uri.starts_with("bookmark://folder/") {
-            // Return bookmarks from specific folder
-            let path = uri.strip_prefix("bookmark://folder/").unwrap();
-            let folder_path: Vec<String> = path.split('/').map(String::from).collect();
-
-            match self.reader.get_folder_bookmarks(&folder_path) {
-                Ok(bookmarks) => {
-                    let content = serde_json::to_string_pretty(&bookmarks)
-                        .map_err(|e| McpError::internal_error(e.to_string(), None))?;
-
-                    Ok(ReadResourceResult {
-                        contents: vec![ResourceContents::text(content, uri)],
-                    })
-                }
-                Err(e) => Err(McpError::resource_not_found(
-                    e.to_string(),
-                    Some(json!({ "uri": uri })),
-                )),
-            }
+            // Folder resources not available with INDEX_NAME approach
+            Err(McpError::resource_not_found(
+                "Folder resources are not available when using INDEX_NAME. Use search tools instead.".to_string(),
+                Some(json!({ "uri": uri })),
+            ))
         } else {
             Err(McpError::resource_not_found(
                 format!("Unknown resource: {uri}"),

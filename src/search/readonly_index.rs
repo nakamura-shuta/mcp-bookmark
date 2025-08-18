@@ -32,19 +32,22 @@ pub struct IndexingStatus {
 impl ReadOnlyIndexManager {
     /// Create new read-only manager for Chrome extension index
     pub async fn new(reader: Arc<BookmarkReader>) -> Result<Self> {
-        // Get index path from config using the same method as SearchManager
-        let profile = reader.config.profile_name.as_deref().unwrap_or("Default");
-        let folder = reader.config.target_folder.as_deref().unwrap_or("all");
-        let index_key = if profile == "Default" && folder == "all" {
-            "Default".to_string()
-        } else {
-            format!("{}_{}", profile.replace(' ', "_"), folder.replace(' ', "_"))
-        };
-
+        // Get index name from config
+        let index_name = reader
+            .config
+            .index_name
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("INDEX_NAME is required"))?;
+        
+        Self::new_with_index_name(index_name).await
+    }
+    
+    /// Create new read-only manager with explicit index name
+    pub async fn new_with_index_name(index_name: &str) -> Result<Self> {
         let index_dir = dirs::data_dir()
             .unwrap_or_else(|| PathBuf::from("."))
             .join("mcp-bookmark")
-            .join(index_key);
+            .join(index_name);
 
         info!("Opening read-only index at: {:?}", index_dir);
 

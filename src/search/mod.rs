@@ -29,8 +29,7 @@ use searcher::BookmarkSearcher;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct IndexMetadata {
     pub version: String,
-    pub profile: String,
-    pub folder: String,
+    pub index_name: String,
     pub created_at: String,
     pub last_updated: String,
     pub bookmark_count: usize,
@@ -54,14 +53,8 @@ pub struct SearchManager {
 impl SearchManager {
     /// Generate index key from config
     pub fn get_index_key(config: &Config) -> String {
-        let profile = config.profile_name.as_deref().unwrap_or("Default");
-
-        let folder = config.target_folder.as_deref().unwrap_or("all");
-
-        // Replace slashes with underscores for safe directory names
-        let folder_safe = folder.replace(['/', '\\'], "_");
-
-        format!("{profile}_{folder_safe}")
+        // Use index_name directly if provided
+        config.index_name.clone().unwrap_or_else(|| "default_index".to_string())
     }
 
     /// Get index path from config
@@ -92,15 +85,8 @@ impl SearchManager {
 
         info!("=================================================");
         info!("Index configuration:");
-        info!(
-            "  Profile: {}",
-            config.profile_name.as_deref().unwrap_or("Default")
-        );
-        info!(
-            "  Folder: {}",
-            config.target_folder.as_deref().unwrap_or("all")
-        );
-        info!("  Index: ~/...mcp-bookmark/{}/", index_key);
+        info!("  Index name: {}", index_key);
+        info!("  Index path: ~/...mcp-bookmark/{}/", index_key);
         info!("=================================================");
 
         Self::new_internal(index_path, Some(config))
@@ -166,14 +152,10 @@ impl SearchManager {
     fn write_metadata(path: &Path, config: &Config) -> Result<()> {
         let meta = IndexMetadata {
             version: "1.0.0".to_string(),
-            profile: config
-                .profile_name
+            index_name: config
+                .index_name
                 .clone()
-                .unwrap_or_else(|| "Default".to_string()),
-            folder: config
-                .target_folder
-                .clone()
-                .unwrap_or_else(|| "all".to_string()),
+                .unwrap_or_else(|| "default_index".to_string()),
             created_at: chrono::Utc::now().to_rfc3339(),
             last_updated: chrono::Utc::now().to_rfc3339(),
             bookmark_count: 0,
@@ -285,8 +267,7 @@ impl SearchManager {
         } else {
             IndexMetadata {
                 version: "1.0.0".to_string(),
-                profile: "Default".to_string(),
-                folder: "all".to_string(),
+                index_name: "default_index".to_string(),
                 created_at: chrono::Utc::now().to_rfc3339(),
                 last_updated: chrono::Utc::now().to_rfc3339(),
                 bookmark_count: 0,

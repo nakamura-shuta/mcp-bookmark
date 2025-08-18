@@ -133,8 +133,7 @@ impl ContentIndexManager {
     /// Create new
     pub async fn new(reader: Arc<BookmarkReader>, fetcher: Arc<ContentFetcher>) -> Result<Self> {
         // Check if we're using pre-built index (from Chrome extension)
-        let using_prebuilt_index =
-            reader.config.profile_name.is_some() && reader.config.target_folder.is_some();
+        let using_prebuilt_index = reader.config.index_name.is_some();
 
         let (bookmarks, total) = if using_prebuilt_index {
             // Don't read bookmarks when using pre-built index
@@ -142,7 +141,7 @@ impl ContentIndexManager {
             (vec![], 0)
         } else {
             // Get bookmarks for normal operation
-            let bookmarks = reader.get_all_bookmarks()?;
+            let bookmarks = reader.read_bookmarks()?;
             let total = bookmarks.len();
             debug!("Initializing search manager ({} bookmarks)", total);
             (bookmarks, total)
