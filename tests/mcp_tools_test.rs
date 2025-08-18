@@ -1,8 +1,7 @@
 use mcp_bookmark::bookmark::BookmarkReader;
 use mcp_bookmark::config::Config;
-use mcp_bookmark::content::ContentFetcher;
 use mcp_bookmark::mcp_server::BookmarkServer;
-use mcp_bookmark::search::ContentIndexManager;
+use mcp_bookmark::search::readonly_index::ReadOnlyIndexManager;
 use rmcp::ServerHandler;
 use std::sync::Arc;
 
@@ -19,9 +18,7 @@ async fn test_server_creation() {
         }
     };
 
-    let fetcher = Arc::new(ContentFetcher::new().expect("Failed to create fetcher"));
-
-    let search_manager = match ContentIndexManager::new(reader.clone(), fetcher.clone()).await {
+    let search_manager = match ReadOnlyIndexManager::new(reader.clone()).await {
         Ok(sm) => Arc::new(sm),
         Err(e) => {
             // Index creation can fail in test environment, that's okay
@@ -53,9 +50,7 @@ async fn test_server_info() {
         }
     };
 
-    let fetcher = Arc::new(ContentFetcher::new().expect("Failed to create fetcher"));
-
-    let search_manager = match ContentIndexManager::new(reader.clone(), fetcher.clone()).await {
+    let search_manager = match ReadOnlyIndexManager::new(reader.clone()).await {
         Ok(sm) => Arc::new(sm),
         Err(_) => {
             println!("⚠️ Could not create search manager in test");
