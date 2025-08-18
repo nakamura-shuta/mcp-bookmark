@@ -35,14 +35,17 @@ pub struct BookmarkNode {
 }
 
 impl BookmarkNode {
+    #[allow(dead_code)]
     pub fn is_folder(&self) -> bool {
         self.node_type == "folder"
     }
 
+    #[allow(dead_code)]
     pub fn is_url(&self) -> bool {
         self.node_type == "url"
     }
 
+    #[allow(dead_code)]
     pub fn set_folder_paths(&mut self, parent_path: Vec<String>) {
         let mut current_path = parent_path.clone();
         if !self.name.is_empty() && self.is_folder() {
@@ -57,12 +60,14 @@ impl BookmarkNode {
         }
     }
 
+    #[allow(dead_code)]
     pub fn flatten(&self) -> Vec<FlatBookmark> {
         let mut result = Vec::new();
         self.flatten_recursive(&mut result);
         result
     }
 
+    #[allow(dead_code)]
     fn flatten_recursive(&self, result: &mut Vec<FlatBookmark>) {
         if self.is_url() {
             if let Some(url) = &self.url {
@@ -84,6 +89,7 @@ impl BookmarkNode {
         }
     }
 
+    #[allow(dead_code)]
     pub fn find_folder(&self, path: &[String]) -> Option<&BookmarkNode> {
         if path.is_empty() {
             return Some(self);
@@ -133,6 +139,7 @@ pub struct FlatBookmark {
 /// Chrome bookmark reader
 #[derive(Debug)]
 pub struct BookmarkReader {
+    #[allow(dead_code)]
     pub bookmarks_path: PathBuf,
     pub config: Config,
 }
@@ -167,12 +174,14 @@ impl BookmarkReader {
         }
     }
 
+    #[allow(dead_code)]
     pub fn read(&self) -> Result<ChromeBookmarks> {
         // This should not be called when using INDEX_NAME
         anyhow::bail!("BookmarkReader::read() should not be called when using INDEX_NAME")
     }
 
     /// Read bookmarks from Chrome, filtering by folder if specified
+    #[allow(dead_code)]
     pub fn read_bookmarks(&self) -> Result<Vec<FlatBookmark>> {
         // Skip reading if using pre-built index
         if self.config.index_name.is_some() {
@@ -188,8 +197,6 @@ impl BookmarkReader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
-    
 
     fn create_test_bookmarks() -> ChromeBookmarks {
         ChromeBookmarks {
@@ -275,10 +282,7 @@ mod tests {
     #[test]
     fn test_bookmark_node_flatten() {
         let mut bookmarks = create_test_bookmarks();
-        bookmarks
-            .roots
-            .bookmark_bar
-            .set_folder_paths(vec![]);
+        bookmarks.roots.bookmark_bar.set_folder_paths(vec![]);
 
         let flat = bookmarks.roots.bookmark_bar.flatten();
         assert_eq!(flat.len(), 2);
@@ -291,10 +295,7 @@ mod tests {
     #[test]
     fn test_find_folder() {
         let mut bookmarks = create_test_bookmarks();
-        bookmarks
-            .roots
-            .bookmark_bar
-            .set_folder_paths(vec![]);
+        bookmarks.roots.bookmark_bar.set_folder_paths(vec![]);
 
         // Find root
         let folder = bookmarks.roots.bookmark_bar.find_folder(&[]);

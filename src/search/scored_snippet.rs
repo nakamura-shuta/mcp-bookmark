@@ -72,6 +72,25 @@ impl ScoredSnippetGenerator {
         }
     }
 
+    /// Generate a single best snippet from content
+    pub fn generate_snippet(&self, content: &str, query: &str, max_len: usize) -> ScoredSnippet {
+        let snippets = self.generate_scored_snippets(content, query);
+
+        if let Some(mut best) = snippets.into_iter().next() {
+            // Truncate if needed
+            if best.text.len() > max_len {
+                best.text.truncate(max_len);
+                if !best.text.ends_with("...") {
+                    best.text.push_str("...");
+                }
+            }
+            best
+        } else {
+            // Return fallback snippet if no matches
+            self.create_fallback_snippet(content)
+        }
+    }
+
     /// Generate scored snippets from content
     pub fn generate_scored_snippets(&self, content: &str, query: &str) -> Vec<ScoredSnippet> {
         if content.is_empty() || query.is_empty() {
@@ -497,11 +516,18 @@ mod tests {
         for snippet in &snippets {
             assert!(snippet.relevance_score >= 0.0 && snippet.relevance_score <= 1.0);
         }
-        
+
         // Check that we have various context types
-        let has_code = snippets.iter().any(|s| s.context_type == ContextType::CodeExample);
-        let has_note = snippets.iter().any(|s| s.context_type == ContextType::ImportantNote);
-        assert!(has_code || has_note, "Should have at least one special context type");
+        let has_code = snippets
+            .iter()
+            .any(|s| s.context_type == ContextType::CodeExample);
+        let has_note = snippets
+            .iter()
+            .any(|s| s.context_type == ContextType::ImportantNote);
+        assert!(
+            has_code || has_note,
+            "Should have at least one special context type"
+        );
     }
 
     #[test]

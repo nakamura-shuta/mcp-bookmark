@@ -7,13 +7,9 @@ mod search;
 use anyhow::Result;
 use bookmark::BookmarkReader;
 use config::Config;
-use content::ContentFetcher;
 use mcp_server::BookmarkServer;
 use rmcp::{ServiceExt, transport::stdio};
-use search::{
-    readonly_index::ReadOnlyIndexManager,
-    search_manager_trait::SearchManagerTrait,
-};
+use search::{readonly_index::ReadOnlyIndexManager, search_manager_trait::SearchManagerTrait};
 use std::env;
 use std::sync::Arc;
 use tracing_appender::{non_blocking, rolling};
@@ -39,13 +35,13 @@ fn parse_args() -> Result<Config> {
             }
             "--clear-index" => {
                 if i + 1 < args.len() {
-                    clear_index(Some(&args[i + 1]));
-                    i += 1;
+                    i += 1; // Skip to the index name argument
+                    clear_index(Some(&args[i]));
+                    std::process::exit(0);
                 } else {
                     println!("Error: --clear-index requires an index name");
                     std::process::exit(1);
                 }
-                std::process::exit(0);
             }
             "--clear-all-indexes" => {
                 clear_all_indexes();
@@ -319,7 +315,6 @@ async fn main() -> Result<()> {
 
     // Create MCP server components
     let reader = Arc::new(BookmarkReader::with_config(config.clone())?);
-    let fetcher = Arc::new(ContentFetcher::new()?);
 
     // Initialize search manager (always use read-only mode for pre-built indexes)
     tracing::debug!("Initializing search index...");

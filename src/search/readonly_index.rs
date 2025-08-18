@@ -5,16 +5,16 @@ use std::sync::Arc;
 use tracing::info;
 
 use super::SearchResult;
-use super::readonly_searcher::ReadOnlySearcher;
 use super::search_manager_trait::SearchManagerTrait;
+use super::unified_searcher::UnifiedSearcher;
 use crate::bookmark::BookmarkReader;
 
 /// Read-only content index manager for Chrome extension indexes
 /// This doesn't use any locks and allows multiple processes to access the same index
 #[derive(Clone, Debug)]
 pub struct ReadOnlyIndexManager {
-    /// Read-only searcher (no locks)
-    searcher: Arc<ReadOnlySearcher>,
+    /// Unified searcher in read-only mode
+    searcher: Arc<UnifiedSearcher>,
 
     /// Index status
     indexing_status: Arc<IndexingStatus>,
@@ -53,11 +53,11 @@ impl ReadOnlyIndexManager {
 
         // Open index in read-only mode (no locks)
         let searcher =
-            ReadOnlySearcher::open(&index_dir).context("Failed to open read-only index")?;
+            UnifiedSearcher::open_readonly(&index_dir).context("Failed to open read-only index")?;
 
         // Get document count
         let stats = searcher.get_stats()?;
-        let doc_count = stats.num_documents;
+        let doc_count = stats.total_documents;
 
         info!("Read-only index opened with {} documents", doc_count);
 

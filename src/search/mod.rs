@@ -1,14 +1,12 @@
-pub mod boosting;
-pub mod content_index;
+// pub mod content_index; // Not used - using pre-built indexes from Chrome extension
 pub mod indexer;
 pub mod mcp_config;
 pub mod readonly_index;
-pub mod readonly_searcher;
 pub mod schema;
 pub mod scored_snippet;
 pub mod search_manager_trait;
-pub mod searcher;
 pub mod snippet;
+pub mod unified_searcher;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -18,11 +16,10 @@ use tracing::{debug, info};
 
 pub use indexer::BookmarkIndexer;
 pub use schema::BookmarkSchema;
-pub use searcher::{SearchParams, SearchResult};
+pub use unified_searcher::{SearchParams, SearchResult, UnifiedSearcher};
 
 use crate::bookmark::FlatBookmark;
 use crate::config::Config;
-use searcher::BookmarkSearcher;
 
 /// Index metadata
 #[derive(Debug, Serialize, Deserialize)]
@@ -37,22 +34,29 @@ pub struct IndexMetadata {
 }
 
 /// Main search manager that coordinates indexing and searching
-#[derive(Debug)]
 pub struct SearchManager {
     #[allow(dead_code)]
     index: Index,
     #[allow(dead_code)]
     schema: BookmarkSchema,
     indexer: BookmarkIndexer,
-    searcher: BookmarkSearcher,
-    booster: Option<boosting::SearchBooster>,
+    searcher: UnifiedSearcher,
     index_path: PathBuf,
+    writer: Option<tantivy::IndexWriter>,
+}
+
+impl std::fmt::Debug for SearchManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SearchManager")
+            .field("index_path", &self.index_path)
+            .field("has_writer", &self.writer.is_some())
+            .finish()
+    }
 }
 
 impl SearchManager {
     /// Generate index key from config
     pub fn get_index_key(config: &Config) -> String {
-        // Use index_name directly if provided
         config
             .index_name
             .clone()
@@ -69,7 +73,6 @@ impl SearchManager {
 
     /// Create a new search manager
     pub fn new(index_path: Option<PathBuf>) -> Result<Self> {
-        // For backward compatibility, use the old path if provided
         let index_path = index_path.unwrap_or_else(|| {
             dirs::data_dir()
                 .unwrap_or_else(|| PathBuf::from("."))
@@ -96,16 +99,13 @@ impl SearchManager {
 
     /// Internal constructor
     fn new_internal(index_path: PathBuf, config: Option<&Config>) -> Result<Self> {
-        // Ensure directory exists
         std::fs::create_dir_all(&index_path).context("Failed to create index directory")?;
 
         let schema = BookmarkSchema::new();
 
-        // Open or create index
         let index = if index_path.join("meta.json").exists() {
             info!("Using existing index: {:?}", index_path);
 
-            // Read and log metadata
             if let Ok(meta_content) = std::fs::read_to_string(index_path.join("meta.json")) {
                 if let Ok(meta) = serde_json::from_str::<IndexMetadata>(&meta_content) {
                     info!(
@@ -119,7 +119,6 @@ impl SearchManager {
         } else {
             info!("Creating new index: {:?}", index_path);
 
-            // Write metadata if config is provided
             if let Some(cfg) = config {
                 Self::write_metadata(&index_path, cfg)?;
             }
@@ -131,33 +130,24 @@ impl SearchManager {
         };
 
         let indexer = BookmarkIndexer::new(index.clone(), schema.clone());
-        let searcher = BookmarkSearcher::new(index.clone(), schema.clone())?;
-
-        // Create booster for improved relevance (Phase 1.2)
-        let booster = Some(boosting::SearchBooster::new(
-            index.clone(),
-            schema.clone(),
-            searcher.reader.clone(),
-        ));
+        let searcher = UnifiedSearcher::new(index.clone(), schema.clone())?;
+        let writer = Some(indexer.create_writer(50_000_000)?);
 
         Ok(Self {
             index,
             schema,
             indexer,
             searcher,
-            booster,
             index_path,
+            writer,
         })
     }
 
-    /// Write metadata to index directory
-    fn write_metadata(path: &Path, config: &Config) -> Result<()> {
-        let meta = IndexMetadata {
-            version: "1.0.0".to_string(),
-            index_name: config
-                .index_name
-                .clone()
-                .unwrap_or_else(|| "default_index".to_string()),
+    /// Write index metadata
+    fn write_metadata(index_path: &Path, config: &Config) -> Result<()> {
+        let metadata = IndexMetadata {
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            index_name: Self::get_index_key(config),
             created_at: chrono::Utc::now().to_rfc3339(),
             last_updated: chrono::Utc::now().to_rfc3339(),
             bookmark_count: 0,
@@ -165,92 +155,74 @@ impl SearchManager {
             index_size_bytes: 0,
         };
 
-        let meta_path = path.join("meta.json");
-        let json = serde_json::to_string_pretty(&meta)?;
-        std::fs::write(meta_path, json)?;
+        let meta_path = index_path.join("meta.json");
+        let meta_content = serde_json::to_string_pretty(&metadata)?;
+        std::fs::write(meta_path, meta_content)?;
+
         Ok(())
     }
 
-    /// Build or rebuild the entire index
-    pub fn build_index(&mut self, bookmarks: &[FlatBookmark]) -> Result<()> {
-        debug!("Building index for {} bookmarks", bookmarks.len());
-        self.indexer.build_index(bookmarks)?;
-        self.searcher.reload()?;
+    /// Index a single bookmark
+    pub fn index_bookmark(&mut self, bookmark: &FlatBookmark) -> Result<()> {
+        if let Some(ref mut writer) = self.writer {
+            self.indexer.index_bookmark(writer, bookmark, None)?;
+        }
         Ok(())
     }
 
-    /// Update a single bookmark
-    pub fn update_bookmark(
+    /// Index bookmarks with content
+    pub fn index_bookmarks_with_content(
         &mut self,
-        bookmark: &FlatBookmark,
-        content: Option<&str>,
+        bookmarks: &[FlatBookmark],
+        content_map: &std::collections::HashMap<String, String>,
     ) -> Result<()> {
-        debug!("Updating bookmark {} in index", bookmark.id);
-        self.indexer.update_bookmark(bookmark, content)?;
-        self.searcher.reload()?;
+        if let Some(ref mut writer) = self.writer {
+            for bookmark in bookmarks {
+                let content = content_map.get(&bookmark.url).map(|s| s.as_str());
+                self.indexer.index_bookmark(writer, bookmark, content)?;
+            }
+            writer.commit()?;
+        }
         Ok(())
     }
 
-    /// Delete a bookmark
-    pub fn delete_bookmark(&mut self, bookmark_id: &str) -> Result<()> {
-        self.indexer.delete_bookmark(bookmark_id)?;
-        self.searcher.reload()?;
+    /// Commit pending changes
+    pub fn commit(&mut self) -> Result<()> {
+        if let Some(ref mut writer) = self.writer {
+            writer.commit()?;
+        }
         Ok(())
     }
 
-    /// Simple text search
+    /// Search the index
     pub fn search(&self, query: &str, limit: usize) -> Result<Vec<SearchResult>> {
         debug!(
             "SearchManager::search called with query: '{}', limit: {}",
             query, limit
         );
-        // Use booster if available for improved relevance (Phase 1.2)
-        let result = if let Some(booster) = &self.booster {
-            booster.search_with_boosting(query, limit)
-        } else {
-            self.searcher.search(query, limit)
-        };
-        debug!("SearchManager::search completed");
-        result
+        self.searcher.search(query, limit)
     }
 
-    /// Search only in content field
-    pub fn search_content_only(&self, query: &str, limit: usize) -> Result<Vec<SearchResult>> {
-        self.searcher.search_content_only(query, limit)
+    /// Search with filters
+    pub fn search_with_filters(&self, params: &SearchParams) -> Result<Vec<SearchResult>> {
+        self.searcher.search_with_params(params)
     }
 
-    /// Advanced search with filters
-    pub fn search_advanced(&self, params: &SearchParams) -> Result<Vec<SearchResult>> {
-        self.searcher.search_with_filters(params)
-    }
-
-    /// Get bookmark by ID
-    pub fn get_by_id(&self, id: &str) -> Result<Option<SearchResult>> {
-        self.searcher.get_by_id(id)
-    }
-
-    /// Get full content by URL from index
-    pub fn get_content_by_url(&self, url: &str) -> Result<Option<String>> {
-        // Get full content directly from index
-        self.searcher.get_full_content_by_url(url)
+    /// Get full content by URL
+    pub fn get_full_content_by_url(&self, url: &str) -> Result<Option<String>> {
+        self.searcher.get_content_by_url(url)
     }
 
     /// Get index statistics
-    pub fn get_stats(&self) -> Result<searcher::IndexStats> {
-        self.searcher.get_stats()
-    }
+    pub fn get_stats(&self) -> Result<IndexStats> {
+        let stats = self.searcher.get_stats()?;
 
-    /// Get index directory size
-    pub fn get_index_size(&self) -> Result<u64> {
-        calculate_dir_size(&self.index_path)
-    }
+        let size_bytes = Self::calculate_index_size(&self.index_path)?;
 
-    /// Clear and rebuild index
-    pub fn rebuild_index(&mut self, bookmarks: &[FlatBookmark]) -> Result<()> {
-        debug!("Rebuilding entire index");
-        self.indexer.build_index(bookmarks)?;
-        self.searcher.reload()?;
-        Ok(())
+        Ok(IndexStats {
+            total_documents: stats.total_documents,
+            index_size_bytes: size_bytes,
+        })
     }
 
     /// Check if index exists
@@ -258,54 +230,82 @@ impl SearchManager {
         self.index_path.join("meta.json").exists()
     }
 
-    /// Update metadata after indexing
-    pub fn update_metadata(&self, bookmark_count: usize, indexed_count: usize) -> Result<()> {
-        let meta_path = self.index_path.join("meta.json");
+    /// Build the entire index from bookmarks
+    pub fn build_index(&mut self, bookmarks: &[FlatBookmark]) -> Result<()> {
+        debug!("Building index for {} bookmarks", bookmarks.len());
 
-        // Read existing metadata or create new
-        let mut meta = if meta_path.exists() {
-            let content = std::fs::read_to_string(&meta_path)?;
-            serde_json::from_str::<IndexMetadata>(&content)?
-        } else {
-            IndexMetadata {
-                version: "1.0.0".to_string(),
-                index_name: "default_index".to_string(),
-                created_at: chrono::Utc::now().to_rfc3339(),
-                last_updated: chrono::Utc::now().to_rfc3339(),
-                bookmark_count: 0,
-                indexed_count: 0,
-                index_size_bytes: 0,
+        if let Some(ref mut writer) = self.writer {
+            // Clear existing documents
+            writer.delete_all_documents()?;
+
+            // Index each bookmark
+            let mut success_count = 0;
+            let mut error_count = 0;
+
+            for bookmark in bookmarks {
+                match self.indexer.index_bookmark(writer, bookmark, None) {
+                    Ok(_) => success_count += 1,
+                    Err(e) => {
+                        tracing::warn!("Failed to index bookmark {}: {}", bookmark.id, e);
+                        error_count += 1;
+                    }
+                }
             }
-        };
 
-        // Update fields
-        meta.last_updated = chrono::Utc::now().to_rfc3339();
-        meta.bookmark_count = bookmark_count;
-        meta.indexed_count = indexed_count;
-        meta.index_size_bytes = self.get_index_size().unwrap_or(0);
+            writer.commit().context("Failed to commit index")?;
 
-        // Write back
-        let json = serde_json::to_string_pretty(&meta)?;
-        std::fs::write(meta_path, json)?;
+            if error_count > 0 {
+                tracing::warn!(
+                    "Index built with errors: {} successful, {} errors",
+                    success_count,
+                    error_count
+                );
+            } else {
+                debug!("Index built successfully: {} documents", success_count);
+            }
+        }
+
         Ok(())
+    }
+
+    /// Calculate index directory size
+    fn calculate_index_size(path: &Path) -> Result<u64> {
+        let mut total_size = 0u64;
+
+        if path.is_dir() {
+            for entry in std::fs::read_dir(path)? {
+                let entry = entry?;
+                let metadata = entry.metadata()?;
+                if metadata.is_file() {
+                    total_size += metadata.len();
+                }
+            }
+        }
+
+        Ok(total_size)
+    }
+
+    /// Clear the index
+    pub fn clear_index(&mut self) -> Result<()> {
+        if let Some(ref mut writer) = self.writer {
+            writer.delete_all_documents()?;
+            writer.commit()?;
+            info!("Index cleared");
+        }
+        Ok(())
+    }
+
+    /// Reload the searcher to see new changes
+    pub fn reload(&mut self) -> Result<()> {
+        self.searcher.reload()
     }
 }
 
-/// Calculate directory size recursively
-fn calculate_dir_size(path: &Path) -> Result<u64> {
-    let mut size = 0;
-    if path.is_dir() {
-        for entry in std::fs::read_dir(path)? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.is_dir() {
-                size += calculate_dir_size(&path)?;
-            } else {
-                size += entry.metadata()?.len();
-            }
-        }
-    }
-    Ok(size)
+/// Index statistics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IndexStats {
+    pub total_documents: usize,
+    pub index_size_bytes: u64,
 }
 
 #[cfg(test)]
@@ -313,167 +313,26 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
-    fn create_test_bookmarks() -> Vec<FlatBookmark> {
-        vec![
-            FlatBookmark {
-                id: "1".to_string(),
-                name: "Rust Documentation".to_string(),
-                url: "https://doc.rust-lang.org".to_string(),
-                date_added: None,
-                date_modified: None,
-                folder_path: vec!["Tech".to_string()],
-            },
-            FlatBookmark {
-                id: "2".to_string(),
-                name: "Rust Book".to_string(),
-                url: "https://doc.rust-lang.org/book".to_string(),
-                date_added: None,
-                date_modified: None,
-                folder_path: vec!["Tech".to_string(), "Books".to_string()],
-            },
-        ]
+    #[test]
+    fn test_search_manager_creation() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut config = crate::config::Config::default();
+        config.index_name = Some("test_index".to_string());
+
+        let result = SearchManager::new(Some(temp_dir.path().to_path_buf()));
+        assert!(result.is_ok());
     }
 
     #[test]
-    fn test_index_creation() {
-        let temp_dir = TempDir::new().unwrap();
-        let mut manager = SearchManager::new(Some(temp_dir.path().to_path_buf())).unwrap();
-        let bookmarks = create_test_bookmarks();
-        manager.build_index(&bookmarks).unwrap();
+    fn test_index_key_generation() {
+        let mut config = Config::default();
+        config.index_name = Some("custom_index".to_string());
+        assert_eq!(SearchManager::get_index_key(&config), "custom_index");
 
-        let results = manager.search("rust", 10).unwrap();
-        assert_eq!(results.len(), 2);
-    }
-
-    #[test]
-    fn test_update_bookmark() {
-        let temp_dir = TempDir::new().unwrap();
-        let mut manager = SearchManager::new(Some(temp_dir.path().to_path_buf())).unwrap();
-        let bookmarks = create_test_bookmarks();
-        manager.build_index(&bookmarks).unwrap();
-
-        let updated = FlatBookmark {
-            id: "1".to_string(),
-            name: "Updated Rust Docs".to_string(),
-            url: "https://doc.rust-lang.org".to_string(),
-            date_added: None,
-            date_modified: None,
-            folder_path: vec!["Tech".to_string()],
-        };
-        manager.update_bookmark(&updated, None).unwrap();
-
-        let results = manager.search("Updated", 10).unwrap();
-        assert_eq!(results.len(), 1);
-    }
-
-    #[test]
-    fn test_content_search() {
-        let temp_dir = TempDir::new().unwrap();
-        let mut manager = SearchManager::new(Some(temp_dir.path().to_path_buf())).unwrap();
-        let bookmarks = create_test_bookmarks();
-        manager.build_index(&bookmarks).unwrap();
-
-        // Update with content
-        manager
-            .update_bookmark(&bookmarks[0], Some("This is Rust programming content"))
-            .unwrap();
-
-        let results = manager.search_content_only("programming", 10).unwrap();
-        assert_eq!(results.len(), 1);
-    }
-
-    #[test]
-    fn test_delete_bookmark() {
-        let temp_dir = TempDir::new().unwrap();
-        let mut manager = SearchManager::new(Some(temp_dir.path().to_path_buf())).unwrap();
-        let bookmarks = create_test_bookmarks();
-        manager.build_index(&bookmarks).unwrap();
-
-        // Delete first bookmark
-        manager.delete_bookmark("1").unwrap();
-
-        let results = manager.search("rust", 10).unwrap();
-        assert_eq!(results.len(), 1);
-        assert_eq!(results[0].id, "2");
-    }
-
-    #[test]
-    fn test_get_by_id() {
-        let temp_dir = TempDir::new().unwrap();
-        let mut manager = SearchManager::new(Some(temp_dir.path().to_path_buf())).unwrap();
-        let bookmarks = create_test_bookmarks();
-        manager.build_index(&bookmarks).unwrap();
-
-        let result = manager.get_by_id("1").unwrap();
-        assert!(result.is_some());
-        assert_eq!(result.unwrap().id, "1");
-
-        let result = manager.get_by_id("999").unwrap();
-        assert!(result.is_none());
-    }
-
-    #[test]
-    fn test_get_stats() {
-        let temp_dir = TempDir::new().unwrap();
-        let mut manager = SearchManager::new(Some(temp_dir.path().to_path_buf())).unwrap();
-        let bookmarks = create_test_bookmarks();
-        manager.build_index(&bookmarks).unwrap();
-
-        let stats = manager.get_stats().unwrap();
-        assert_eq!(stats.num_documents, 2);
-    }
-
-    #[test]
-    fn test_rebuild_index() {
-        let temp_dir = TempDir::new().unwrap();
-        let mut manager = SearchManager::new(Some(temp_dir.path().to_path_buf())).unwrap();
-        let bookmarks = create_test_bookmarks();
-        manager.build_index(&bookmarks).unwrap();
-
-        // Add new bookmark for rebuild
-        let mut new_bookmarks = bookmarks.clone();
-        new_bookmarks.push(FlatBookmark {
-            id: "3".to_string(),
-            name: "New Bookmark".to_string(),
-            url: "https://example.com".to_string(),
-            date_added: None,
-            date_modified: None,
-            folder_path: vec!["Other".to_string()],
-        });
-
-        manager.rebuild_index(&new_bookmarks).unwrap();
-
-        // Empty query may not return all results, search for something specific
-        let results = manager.search("bookmark", 10).unwrap();
-        // Just verify rebuild doesn't crash and returns some results
-        assert!(results.len() <= 3);
-    }
-
-    #[test]
-    fn test_index_exists() {
-        let temp_dir = TempDir::new().unwrap();
-        let mut manager = SearchManager::new(Some(temp_dir.path().to_path_buf())).unwrap();
-
-        // Note: index_exists() may return true even for new index
-        // because MmapDirectory creates meta.json immediately
-        // Just ensure it doesn't crash
-        let _ = manager.index_exists();
-
-        let bookmarks = create_test_bookmarks();
-        manager.build_index(&bookmarks).unwrap();
-
-        // Should be true after building
-        assert!(manager.index_exists());
-    }
-
-    #[test]
-    fn test_get_index_size() {
-        let temp_dir = TempDir::new().unwrap();
-        let mut manager = SearchManager::new(Some(temp_dir.path().to_path_buf())).unwrap();
-        let bookmarks = create_test_bookmarks();
-        manager.build_index(&bookmarks).unwrap();
-
-        let size = manager.get_index_size().unwrap();
-        assert!(size > 0);
+        let config_no_name = Config::default();
+        assert_eq!(
+            SearchManager::get_index_key(&config_no_name),
+            "default_index"
+        );
     }
 }

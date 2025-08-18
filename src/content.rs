@@ -22,10 +22,12 @@ pub struct PageContent {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ContentFetcher {
     client: reqwest::Client,
 }
 
+#[allow(dead_code)]
 impl ContentFetcher {
     pub fn new() -> Result<Self> {
         let client = reqwest::Client::builder()

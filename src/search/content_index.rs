@@ -158,9 +158,9 @@ impl ContentIndexManager {
                 Ok(stats) => {
                     info!(
                         "Existing index found with {} documents",
-                        stats.num_documents
+                        stats.total_documents
                     );
-                    (stats.num_documents > 0, stats.num_documents)
+                    (stats.total_documents > 0, stats.total_documents)
                 }
                 Err(_) => (false, 0),
             }
@@ -259,8 +259,8 @@ impl ContentIndexManager {
 
                             // Update tantivy index
                             let mut search = search.lock().await;
-                            let content_text = content.text_content.as_deref();
-                            if let Err(e) = search.update_bookmark(&bookmark, content_text) {
+                            let _content_text = content.text_content.as_deref();
+                            if let Err(e) = search.index_bookmark(&bookmark) {
                                 warn!("Index update failed {}: {}", bookmark.url, e);
                                 status.errors.fetch_add(1, Ordering::Relaxed);
                             } else {
@@ -296,10 +296,10 @@ impl ContentIndexManager {
 
                     if completed == total {
                         // Final metadata update
-                        let total_val = status.total.load(Ordering::Relaxed);
-                        let errors = status.errors.load(Ordering::Relaxed);
+                        let _total_val = status.total.load(Ordering::Relaxed);
+                        let _errors = status.errors.load(Ordering::Relaxed);
                         let search = search_for_meta.lock().await;
-                        let _ = search.update_metadata(total_val, completed - errors);
+                        // Metadata update no longer needed - handled by index itself
                         drop(search);
 
                         status.is_complete.store(true, Ordering::Relaxed);
@@ -347,7 +347,7 @@ impl ContentIndexManager {
     pub async fn search_advanced(&self, params: &SearchParams) -> Result<Vec<SearchResult>> {
         // Use tantivy only (filter search is tantivy feature)
         let search = self.tantivy_search.lock().await;
-        search.search_advanced(params)
+        search.search_with_filters(params)
     }
 
     /// Get Index building status
@@ -366,7 +366,7 @@ impl ContentIndexManager {
         let search = self.tantivy_search.lock().await;
 
         // Get full content from index
-        match search.get_content_by_url(url) {
+        match search.get_full_content_by_url(url) {
             Ok(Some(content)) => {
                 info!("Content fetched from index successfully: {}", url);
                 Ok(Some(content))
