@@ -37,9 +37,11 @@ The install script will guide you through:
 ### Detailed Steps
 
 #### Step 1: Run the Install Script
+
 The script will build everything and guide you through setup.
 
 #### Step 2: Install Chrome Extension (when prompted)
+
 1. Open Chrome and go to `chrome://extensions/`
 2. Enable "Developer mode" (top right)
 3. Click "Load unpacked"
@@ -47,6 +49,7 @@ The script will build everything and guide you through setup.
 5. Copy the Extension ID and paste it when prompted
 
 #### Step 3: Create Your First Index (when prompted)
+
 1. Click the extension icon in Chrome toolbar
 2. Enter an index name (e.g., "my-bookmarks")
 3. Select a bookmark folder to index
@@ -54,6 +57,7 @@ The script will build everything and guide you through setup.
 5. Wait for completion, then return to terminal
 
 #### Step 4: Complete Setup
+
 1. Enter the index name you just created
 2. Copy `.mcp.json` to your project:
    ```bash
@@ -61,6 +65,7 @@ The script will build everything and guide you through setup.
    ```
 
 #### Step 5: Use in Claude Code
+
 1. In Claude Code, run: `/mcp`
 2. Select "mcp-bookmark" to activate
 3. Try it out:
