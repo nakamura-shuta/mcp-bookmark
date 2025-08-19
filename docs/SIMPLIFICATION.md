@@ -2,25 +2,27 @@
 
 ## Current Implementation
 
-The search system uses a simple, efficient approach focused on practical usage patterns.
+The search system uses a Chrome extension-based indexing approach with Japanese language support.
 
 ## Key Design Decisions
 
-### Single Search System
-- **Tantivy-only** full-text search
-- No fallback mechanisms or hybrid approaches
-- Simpler codebase with better maintainability
+### Chrome Extension Integration
+- **Pre-built indexes** created by Chrome extension
+- **Native messaging host** for communication
+- **Read-only access** to extension-created indexes
+- No server-side content fetching needed
 
-### Background Indexing
-- Starts automatically on server startup
-- Prioritizes documentation sites (docs.rs, react.dev, MDN)
-- Indexes content progressively in background
+### Japanese Language Support
+- **Lindera tokenizer** for proper Japanese text segmentation
+- **UTF-8 safe** text processing
+- Works seamlessly with English content
+- Automatic language detection
 
 ### Index-First Strategy
 The `get_bookmark_content` tool follows this approach:
-1. Check if content exists in index
-2. If not found, fetch from web
-3. Store in index for future use
+1. Check if content exists in Chrome extension index
+2. Return indexed content directly
+3. No web fetching - all content pre-indexed
 
 ## Search Tools Behavior
 
@@ -44,13 +46,14 @@ The `get_bookmark_content` tool follows this approach:
 
 | Time | Available Features |
 |------|-------------------|
-| 0s | Metadata search (titles/URLs) |
-| 10-30s | Core documentation content |
-| ~2-5min | Most bookmark content indexed |
+| 0s | Full-text search with pre-indexed content |
+| 0s | Japanese and English language support |
+| 0s | All bookmark content immediately available |
 
 ## Benefits
 
-- **Simplified codebase** - Single search path
-- **Predictable behavior** - No complex fallback logic  
-- **Better performance** - Lower memory usage
-- **Easier testing** - Deterministic behavior
+- **Instant availability** - All content pre-indexed by Chrome extension
+- **Multi-language support** - Japanese tokenization with Lindera
+- **Zero latency** - No runtime content fetching
+- **Better reliability** - No network dependencies
+- **Simplified architecture** - Read-only index access

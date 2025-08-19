@@ -2,15 +2,20 @@
 
 ## Overview
 
-Chrome Bookmark MCP Server provides read-only access to Chrome bookmarks via the Model Context Protocol (MCP). It features full-text search with background indexing and multi-profile support.
+Chrome Bookmark MCP Server provides read-only access to Chrome bookmarks via the Model Context Protocol (MCP). It features full-text search with Chrome extension-based indexing, Japanese language support via Lindera, and multi-profile support.
 
 ## Core Components
 
 - `bookmark.rs` - Chrome bookmark JSON parsing and filtering
 - `chrome_profile.rs` - Chrome profile detection and management  
 - `mcp_server.rs` - MCP protocol implementation with 6 tools
-- `search/` - Tantivy full-text search engine integration
-- `content.rs` - Web page content fetching
+- `search/` - Tantivy full-text search with Lindera Japanese tokenization
+  - `common.rs` - Shared types and utilities
+  - `search_manager.rs` - Index management and search operations
+  - `tokenizer.rs` - Lindera tokenizer configuration
+  - `unified_searcher.rs` - Unified search interface
+  - `content_index.rs` - Chrome extension index integration
+- `bin/mcp-bookmark-native.rs` - Native messaging host for Chrome extension
 
 ## MCP Tools (6 Available)
 
@@ -44,7 +49,8 @@ Set via environment variables:
 - Subfolder support with slash separator (e.g., "Tech/React" → "Tech_React")
 
 ### Search Features
-- **Background indexing** starts on server startup
-- **Priority content fetching** (docs.rs, react.dev, MDN prioritized)
-- **Index-first retrieval** for get_bookmark_content
+- **Chrome extension indexing** - Pre-built indexes via browser extension
+- **Japanese language support** - Lindera tokenizer for proper segmentation
+- **Native messaging** - Communication with Chrome extension
+- **Read-only indexes** - No runtime content fetching needed
 - **Full-text search** returns content_snippet and has_full_content fields
