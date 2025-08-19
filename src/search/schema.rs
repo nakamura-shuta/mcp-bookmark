@@ -2,6 +2,8 @@ use tantivy::schema::{
     FAST, Field, IndexRecordOption, STORED, STRING, Schema, TextFieldIndexing, TextOptions,
 };
 
+use super::tokenizer::JAPANESE_TOKENIZER_NAME;
+
 /// Bookmark index schema definition
 #[derive(Clone, Debug)]
 pub struct BookmarkSchema {
@@ -29,7 +31,7 @@ impl BookmarkSchema {
 
         // Configure text options with Lindera tokenizer for Japanese text
         let text_field_indexing = TextFieldIndexing::default()
-            .set_tokenizer("lang_ja") // Use Lindera tokenizer with standard name
+            .set_tokenizer(JAPANESE_TOKENIZER_NAME) // Use Lindera tokenizer
             .set_index_option(IndexRecordOption::WithFreqsAndPositions);
 
         let text_options = TextOptions::default()

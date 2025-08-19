@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use tantivy::{Index, IndexWriter, TantivyDocument};
 use tracing::{debug, warn};
 
+use super::common::{DEFAULT_WRITER_HEAP_SIZE, MIN_WRITER_HEAP_SIZE, extract_domain, parse_date};
 use super::schema::BookmarkSchema;
 use crate::bookmark::FlatBookmark;
 
@@ -21,8 +22,7 @@ impl BookmarkIndexer {
     /// Create an index writer
     pub fn create_writer(&self, heap_size: usize) -> Result<IndexWriter> {
         // Ensure minimum heap size for tantivy 0.24
-        let min_heap = 15_000_000;
-        let actual_heap = heap_size.max(min_heap);
+        let actual_heap = heap_size.max(MIN_WRITER_HEAP_SIZE);
         self.index
             .writer(actual_heap)
             .context("Failed to create index writer")
@@ -73,7 +73,7 @@ impl BookmarkIndexer {
     pub fn build_index(&self, bookmarks: &[FlatBookmark]) -> Result<()> {
         debug!("Building index for {} bookmarks", bookmarks.len());
 
-        let mut writer = self.create_writer(50_000_000)?;
+        let mut writer = self.create_writer(DEFAULT_WRITER_HEAP_SIZE)?;
 
         // Clear existing documents
         writer.delete_all_documents()?;
@@ -135,18 +135,6 @@ impl BookmarkIndexer {
 
         Ok(())
     }
-}
-
-/// Extract domain from URL
-fn extract_domain(url: &str) -> Option<String> {
-    url::Url::parse(url)
-        .ok()
-        .and_then(|u| u.host_str().map(|h| h.to_string()))
-}
-
-/// Parse date string to timestamp
-fn parse_date(date: &Option<String>) -> Option<i64> {
-    date.as_ref()?.parse::<i64>().ok()
 }
 
 #[cfg(test)]

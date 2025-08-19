@@ -1,8 +1,4 @@
 use anyhow::{Context, Result};
-use lindera::dictionary::{DictionaryKind, load_dictionary_from_kind};
-use lindera::mode::{Mode, Penalty};
-use lindera::segmenter::Segmenter;
-use lindera_tantivy::tokenizer::LinderaTokenizer;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use tantivy::{
@@ -12,10 +8,12 @@ use tantivy::{
     query::{BooleanQuery, BoostQuery, Occur, Query, QueryParser, TermQuery},
     schema::Value,
 };
-use tracing::{debug, info};
+use tracing::debug;
 
+use super::common::{INDEX_METADATA_FILE, doc_to_result};
 use super::schema::BookmarkSchema;
 use super::scored_snippet::ScoredSnippetGenerator;
+use super::tokenizer::register_lindera_tokenizer;
 
 /// Unified searcher that combines all search functionality
 pub struct UnifiedSearcher {
@@ -58,7 +56,7 @@ impl UnifiedSearcher {
     pub fn open_readonly<P: AsRef<Path>>(index_path: P) -> Result<Self> {
         let index_path = index_path.as_ref();
 
-        if !index_path.join("meta.json").exists() {
+        if !index_path.join(INDEX_METADATA_FILE).exists() {
             return Err(anyhow::anyhow!("Index not found at {:?}", index_path));
         }
 
@@ -68,34 +66,9 @@ impl UnifiedSearcher {
         let schema = BookmarkSchema::new();
 
         // Register Lindera tokenizer for read-only index
-        Self::register_lindera_tokenizer(&index)?;
+        register_lindera_tokenizer(&index)?;
 
         Self::new(index, schema)
-    }
-
-    /// Register Lindera tokenizer for Japanese text
-    fn register_lindera_tokenizer(index: &Index) -> Result<()> {
-        debug!("Registering Lindera tokenizer for Japanese text processing");
-
-        // Load IPADIC dictionary
-        let dictionary = load_dictionary_from_kind(DictionaryKind::IPADIC)
-            .context("Failed to load IPADIC dictionary")?;
-
-        // Use Decompose mode for better search results
-        let mode = Mode::Decompose(Penalty::default());
-        let user_dictionary = None;
-
-        // Create Segmenter with the dictionary
-        let segmenter = Segmenter::new(mode, dictionary, user_dictionary);
-
-        // Create Lindera tokenizer from segmenter
-        let tokenizer = LinderaTokenizer::from_segmenter(segmenter);
-
-        // Register the tokenizer with name "lang_ja"
-        index.tokenizers().register("lang_ja", tokenizer);
-
-        info!("Lindera tokenizer registered successfully");
-        Ok(())
     }
 
     /// Reload the index reader to see new changes
@@ -277,53 +250,13 @@ impl UnifiedSearcher {
         score: f32,
         query: &str,
     ) -> Result<SearchResult> {
-        let id = doc
-            .get_first(self.schema.id)
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-
-        let title = doc
-            .get_first(self.schema.title)
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-
-        let url = doc
-            .get_first(self.schema.url)
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-
-        let content = doc
-            .get_first(self.schema.content)
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-
-        let folder_path = doc
-            .get_first(self.schema.folder_path)
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-
-        // Generate snippet with context detection
-        let scored_snippet = self
-            .scored_snippet_generator
-            .generate_snippet(&content, query, 300);
-
-        Ok(SearchResult {
-            id,
-            title,
-            url,
-            snippet: scored_snippet.text.clone(),
-            content: scored_snippet.text, // Use snippet for preview
-            full_content: None,           // Don't include full content in search results
+        doc_to_result(
+            doc,
+            &self.schema,
             score,
-            folder_path,
-            last_indexed: None,
-            context_type: Some(format!("{:?}", scored_snippet.context_type)),
-        })
+            query,
+            &self.scored_snippet_generator,
+        )
     }
 }
 
@@ -402,7 +335,7 @@ pub struct IndexStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::search::BookmarkSchema;
+    use crate::search::schema::BookmarkSchema;
     use tempfile::TempDir;
 
     #[test]

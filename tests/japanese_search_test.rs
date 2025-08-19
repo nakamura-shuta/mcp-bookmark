@@ -34,13 +34,13 @@ mod japanese_search_tests {
         let bookmarks = vec![
             create_japanese_bookmark(
                 "1",
-                "石川さんの出社日",
-                "石川さんの出社日について確認します。基本的に平日はSlack OK。",
+                "田中さんの出社日",
+                "田中さんの出社日について確認します。基本的に平日はSlack OK。",
             ),
             create_japanese_bookmark(
                 "2",
                 "会議スケジュール",
-                "明日の会議は石川さんも参加予定です。",
+                "明日の会議は田中さんも参加予定です。",
             ),
             create_japanese_bookmark(
                 "3",
@@ -53,11 +53,11 @@ mod japanese_search_tests {
         let mut content_map = std::collections::HashMap::new();
         content_map.insert(
             "https://example.com/1".to_string(),
-            "石川さんの出社日について確認します。基本的に平日はSlack OK。".to_string(),
+            "田中さんの出社日について確認します。基本的に平日はSlack OK。".to_string(),
         );
         content_map.insert(
             "https://example.com/2".to_string(),
-            "明日の会議は石川さんも参加予定です。".to_string(),
+            "明日の会議は田中さんも参加予定です。".to_string(),
         );
         content_map.insert(
             "https://example.com/3".to_string(),
@@ -65,24 +65,26 @@ mod japanese_search_tests {
         );
 
         // Build index with Japanese content
-        manager.index_bookmarks_with_content(&bookmarks, &content_map).unwrap();
+        manager
+            .index_bookmarks_with_content(&bookmarks, &content_map)
+            .unwrap();
         manager.reload().unwrap(); // Ensure searcher sees new content
 
         // Test 1: Search with space-separated terms
-        let results = manager.search("石川 出社", 10).unwrap();
-        assert!(!results.is_empty(), "Should find results for '石川 出社'");
+        let results = manager.search("田中 出社", 10).unwrap();
+        assert!(!results.is_empty(), "Should find results for '田中 出社'");
         assert!(
             results.iter().any(|r| r.url == "https://example.com/1"),
-            "Should find bookmark 1 with '石川さんの出社日'"
+            "Should find bookmark 1 with '田中さんの出社日'"
         );
 
         // Test 2: Search for single term
-        let results = manager.search("石川さん", 10).unwrap();
-        assert!(!results.is_empty(), "Should find results for '石川さん'");
+        let results = manager.search("田中さん", 10).unwrap();
+        assert!(!results.is_empty(), "Should find results for '田中さん'");
         assert_eq!(
             results.len(),
             2,
-            "Should find 2 bookmarks mentioning 石川さん"
+            "Should find 2 bookmarks mentioning 田中さん"
         );
 
         // Test 3: Search for partial match
@@ -90,7 +92,7 @@ mod japanese_search_tests {
         assert!(!results.is_empty(), "Should find results for '出社日'");
 
         // Test 4: Search with different word order
-        let results = manager.search("出社 石川", 10).unwrap();
+        let results = manager.search("出社 田中", 10).unwrap();
         assert!(
             !results.is_empty(),
             "Should find results even with different word order"
@@ -134,7 +136,9 @@ mod japanese_search_tests {
             "REST APIの仕様書です。".to_string(),
         );
 
-        manager.index_bookmarks_with_content(&bookmarks, &content_map).unwrap();
+        manager
+            .index_bookmarks_with_content(&bookmarks, &content_map)
+            .unwrap();
         manager.reload().unwrap(); // Ensure searcher sees new content
 
         // Test mixed language search
@@ -188,7 +192,9 @@ mod japanese_search_tests {
             "京都の観光スポット紹介。".to_string(),
         );
 
-        manager.index_bookmarks_with_content(&bookmarks, &content_map).unwrap();
+        manager
+            .index_bookmarks_with_content(&bookmarks, &content_map)
+            .unwrap();
         manager.reload().unwrap(); // Ensure searcher sees new content
 
         // Test compound word tokenization
@@ -211,7 +217,7 @@ mod japanese_search_tests {
         // Simulate the Notion page content
         let content = "各種設定情報 データベース関連 レポート info \
                       デプロイ：https://vercel.com/guides/set-up-a-staging-environment-on-vercel \
-                      4/11までの質問 石川さんの出社日 基本的に平日はslack OK \
+                      4/11までの質問 田中さんの出社日 基本的に平日はslack OK \
                       打ち合わせは18,25は可能な予定 それぞれのドメインとvercelが発行するURLの関係など";
 
         let bookmarks = vec![FlatBookmark {
@@ -230,11 +236,11 @@ mod japanese_search_tests {
         manager.commit().unwrap();
 
         // Test the specific search case
-        let results = manager.search("石川さんの出社日", 10).unwrap();
+        let results = manager.search("田中さんの出社日", 10).unwrap();
         // This will pass once content indexing is properly implemented
 
         // Test with space-separated query
-        let results = manager.search("石川 出社日", 10).unwrap();
+        let results = manager.search("田中 出社日", 10).unwrap();
         // This should work with Lindera tokenizer
     }
 }

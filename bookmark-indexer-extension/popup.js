@@ -120,7 +120,7 @@ function setupListeners() {
     
     button.disabled = true;
     showProgress();
-    showStatus('Indexing...', 'info');
+    showStatus('Starting indexing...', 'info');
     
     chrome.runtime.sendMessage({
       type: 'index_folder',
@@ -150,7 +150,9 @@ function setupListeners() {
 // Progress bar
 function showProgress() {
   document.getElementById('progress').style.display = 'block';
-  updateProgress(0, 100);
+  // Don't show initial numbers - wait for actual progress updates
+  document.getElementById('progress-text').textContent = 'Preparing...';
+  document.getElementById('progress-fill').style.width = '0%';
 }
 
 function hideProgress() {

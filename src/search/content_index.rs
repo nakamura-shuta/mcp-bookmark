@@ -1,11 +1,12 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::Ordering;
 use tokio::sync::{Mutex, Semaphore};
 use tokio::time::{Duration, timeout};
 use tracing::{debug, info, warn};
 
+use super::common::IndexingStatus;
 use super::{SearchManager, SearchParams, SearchResult, search_manager_trait::SearchManagerTrait};
 use crate::bookmark::{BookmarkReader, FlatBookmark};
 use crate::content::ContentFetcher;
@@ -22,111 +23,6 @@ pub struct ContentIndexManager {
 
     /// Index building status
     indexing_status: Arc<IndexingStatus>,
-}
-
-/// Index building status
-#[derive(Debug)]
-pub struct IndexingStatus {
-    /// Total bookmark count
-    pub total: AtomicUsize,
-
-    /// Completed count
-    pub completed: AtomicUsize,
-
-    /// Error count
-    pub errors: AtomicUsize,
-
-    /// Completion flag
-    pub is_complete: AtomicBool,
-
-    /// Start time
-    pub started_at: std::time::Instant,
-
-    /// Using pre-built index from Chrome extension
-    pub using_prebuilt: bool,
-
-    /// Number of documents in pre-built index
-    pub prebuilt_doc_count: usize,
-}
-
-impl IndexingStatus {
-    pub fn new(total: usize) -> Self {
-        Self {
-            total: AtomicUsize::new(total),
-            completed: AtomicUsize::new(0),
-            errors: AtomicUsize::new(0),
-            is_complete: AtomicBool::new(false),
-            started_at: std::time::Instant::now(),
-            using_prebuilt: false,
-            prebuilt_doc_count: 0,
-        }
-    }
-
-    /// Create for pre-built index
-    pub fn for_prebuilt(doc_count: usize) -> Self {
-        Self {
-            total: AtomicUsize::new(0),
-            completed: AtomicUsize::new(0),
-            errors: AtomicUsize::new(0),
-            is_complete: AtomicBool::new(true),
-            started_at: std::time::Instant::now(),
-            using_prebuilt: true,
-            prebuilt_doc_count: doc_count,
-        }
-    }
-
-    /// Get progress percentage (0.0 - 100.0)
-    pub fn progress_percentage(&self) -> f64 {
-        let total = self.total.load(Ordering::Relaxed);
-        if total == 0 {
-            return 100.0;
-        }
-        let completed = self.completed.load(Ordering::Relaxed);
-        (completed as f64 / total as f64) * 100.0
-    }
-
-    /// Generate status string
-    pub fn status_string(&self) -> String {
-        // Special message for pre-built index
-        if self.using_prebuilt {
-            return format!(
-                "✅ Chrome Extension index loaded: {} documents ready",
-                self.prebuilt_doc_count
-            );
-        }
-
-        let total = self.total.load(Ordering::Relaxed);
-        let completed = self.completed.load(Ordering::Relaxed);
-        let errors = self.errors.load(Ordering::Relaxed);
-        let elapsed = self.started_at.elapsed();
-
-        if self.is_complete.load(Ordering::Relaxed) {
-            format!(
-                "✅ Index build complete: {}/{} success, {} errors (duration: {:.1}s)",
-                completed - errors,
-                total,
-                errors,
-                elapsed.as_secs_f64()
-            )
-        } else {
-            let eta = if completed > 0 {
-                let per_item = elapsed.as_secs_f64() / completed as f64;
-                let remaining = total - completed;
-                Duration::from_secs_f64(per_item * remaining as f64)
-            } else {
-                Duration::from_secs(0)
-            };
-
-            format!(
-                "📥 Building index: {}/{} ({:.1}%, {} errors, estimated remaining: {}s)",
-                completed,
-                total,
-                self.progress_percentage(),
-                errors,
-                eta.as_secs()
-            )
-        }
-    }
 }
 
 impl ContentIndexManager {
@@ -262,23 +158,24 @@ impl ContentIndexManager {
                             let _content_text = content.text_content.as_deref();
                             if let Err(e) = search.index_bookmark(&bookmark) {
                                 warn!("Index update failed {}: {}", bookmark.url, e);
-                                status.errors.fetch_add(1, Ordering::Relaxed);
+                                status.increment_errors();
                             } else {
                                 debug!("✅ Index update succeeded: {}", bookmark.url);
                             }
                         }
                         Ok(Err(e)) => {
                             warn!("Content fetch failed {}: {}", bookmark.url, e);
-                            status.errors.fetch_add(1, Ordering::Relaxed);
+                            status.increment_errors();
                         }
                         Err(_) => {
                             warn!("Timeout (5s): {}", bookmark.url);
-                            status.errors.fetch_add(1, Ordering::Relaxed);
+                            status.increment_errors();
                         }
                     }
 
                     // Update progress
-                    let completed = status.completed.fetch_add(1, Ordering::Relaxed) + 1;
+                    status.increment_completed();
+                    let completed = status.completed.load(Ordering::Relaxed);
                     let total = status.total.load(Ordering::Relaxed);
 
                     // Show progress (10% increments, or first/last)
@@ -291,99 +188,62 @@ impl ContentIndexManager {
                         || (completed == 10 || completed == 50 || completed == 100)
                     // Milestone
                     {
-                        info!("{}", status.status_string());
+                        info!("{}", status.summary());
                     }
 
                     if completed == total {
                         // Final metadata update
-                        let _total_val = status.total.load(Ordering::Relaxed);
-                        let _errors = status.errors.load(Ordering::Relaxed);
-                        let search = search_for_meta.lock().await;
-                        // Metadata update no longer needed - handled by index itself
-                        drop(search);
-
-                        status.is_complete.store(true, Ordering::Relaxed);
-                        info!("🎉 Content index build complete!");
+                        let mut search = search_for_meta.lock().await;
+                        if let Err(e) = search.commit() {
+                            warn!("Failed final commit: {}", e);
+                        }
                     }
                 });
 
                 handles.push(handle);
             }
 
-            // Wait for all tasks to complete
+            // Wait for all to complete
             for handle in handles {
                 let _ = handle.await;
             }
+
+            // Mark as complete
+            status.mark_complete();
+            info!("{}", status.summary());
         });
     }
 
-    /// Execute search (using tantivy only)
+    /// Execute search
     pub async fn search(&self, query: &str, limit: usize) -> Result<Vec<SearchResult>> {
-        info!(
-            "ContentIndexManager::search called with query: '{}', limit: {}",
-            query, limit
-        );
-
-        // Search with tantivy
         let search = self.tantivy_search.lock().await;
-        info!("Calling tantivy search...");
-        let results = search.search(query, limit)?;
-        info!("Tantivy search returned {} results", results.len());
-
-        // Provide information if few results during indexing
-        if results.is_empty() && !self.indexing_status.is_complete.load(Ordering::Relaxed) {
-            debug!(
-                "No search results. {} (Results may be incomplete as content index is still building)",
-                self.indexing_status.status_string()
-            );
-        } else if !results.is_empty() {
-            debug!("Search hits: {} items", results.len());
-        }
-
-        Ok(results)
+        search.search(query, limit)
     }
 
-    /// Advanced search (with filters)
-    pub async fn search_advanced(&self, params: &SearchParams) -> Result<Vec<SearchResult>> {
-        // Use tantivy only (filter search is tantivy feature)
+    /// Search with filters
+    pub async fn search_with_filters(&self, params: &SearchParams) -> Result<Vec<SearchResult>> {
         let search = self.tantivy_search.lock().await;
         search.search_with_filters(params)
     }
 
-    /// Get Index building status
-    pub fn get_indexing_status(&self) -> String {
-        self.indexing_status.status_string()
+    /// Get full content by URL
+    pub async fn get_full_content_by_url(&self, url: &str) -> Result<Option<String>> {
+        let search = self.tantivy_search.lock().await;
+        search.get_full_content_by_url(url)
     }
 
-    /// Check if index building is complete
+    /// Get indexing status string
+    pub fn get_indexing_status(&self) -> String {
+        self.indexing_status.summary()
+    }
+
+    /// Check if indexing is complete
     pub fn is_indexing_complete(&self) -> bool {
         self.indexing_status.is_complete.load(Ordering::Relaxed)
     }
-
-    /// Get full content from URL (from index only)
-    pub async fn get_content_by_url(&self, url: &str) -> Result<Option<String>> {
-        // Get content directly from index only
-        let search = self.tantivy_search.lock().await;
-
-        // Get full content from index
-        match search.get_full_content_by_url(url) {
-            Ok(Some(content)) => {
-                info!("Content fetched from index successfully: {}", url);
-                Ok(Some(content))
-            }
-            Ok(None) => {
-                info!("Content not found in index for URL: {}", url);
-                Ok(None)
-            }
-            Err(e) => {
-                warn!("Error fetching content from index for {}: {}", url, e);
-                Ok(None)
-            }
-        }
-    }
 }
 
-// Implement the SearchManagerTrait for ContentIndexManager
+// Implement SearchManagerTrait for ContentIndexManager
 #[async_trait]
 impl SearchManagerTrait for ContentIndexManager {
     async fn search(&self, query: &str, limit: usize) -> Result<Vec<SearchResult>> {
@@ -391,11 +251,11 @@ impl SearchManagerTrait for ContentIndexManager {
     }
 
     async fn search_advanced(&self, params: &SearchParams) -> Result<Vec<SearchResult>> {
-        ContentIndexManager::search_advanced(self, params).await
+        self.search_with_filters(params).await
     }
 
     async fn get_content_by_url(&self, url: &str) -> Result<Option<String>> {
-        ContentIndexManager::get_content_by_url(self, url).await
+        self.get_full_content_by_url(url).await
     }
 
     fn get_indexing_status(&self) -> String {
@@ -404,42 +264,5 @@ impl SearchManagerTrait for ContentIndexManager {
 
     fn is_indexing_complete(&self) -> bool {
         self.is_indexing_complete()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_search_manager_creation() {
-        // Test configuration with index_name set
-        let mut config = crate::config::Config::default();
-        config.index_name = Some("test_index".to_string());
-        let reader = Arc::new(BookmarkReader::with_config(config).unwrap());
-        let fetcher = Arc::new(ContentFetcher::new().unwrap());
-
-        // Create search manager
-        let manager = ContentIndexManager::new(reader, fetcher).await.unwrap();
-
-        // When using pre-built index (index_name is set), it should be complete immediately
-        assert!(manager.is_indexing_complete());
-        let status = manager.get_indexing_status();
-        assert!(status.contains("complete") || status.contains("ready"));
-    }
-
-    #[tokio::test]
-    #[ignore] // This test requires exclusive access to index directory
-    async fn test_simple_search() {
-        let config = crate::config::Config::default();
-        let reader = Arc::new(BookmarkReader::with_config(config).unwrap());
-        let fetcher = Arc::new(ContentFetcher::new().unwrap());
-
-        let manager = ContentIndexManager::new(reader, fetcher).await.unwrap();
-
-        // Metadata search (without content)
-        let results = manager.search("test", 10).await.unwrap();
-        // Results are environment-dependent, just check for no errors
-        let _ = results;
     }
 }

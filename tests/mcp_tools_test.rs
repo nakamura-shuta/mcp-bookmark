@@ -1,7 +1,7 @@
 use mcp_bookmark::bookmark::BookmarkReader;
 use mcp_bookmark::config::Config;
 use mcp_bookmark::mcp_server::BookmarkServer;
-use mcp_bookmark::search::readonly_index::ReadOnlyIndexManager;
+use mcp_bookmark::search::SearchManager;
 use rmcp::ServerHandler;
 use std::sync::Arc;
 
@@ -18,7 +18,8 @@ async fn test_server_creation() {
         }
     };
 
-    let search_manager = match ReadOnlyIndexManager::new(reader.clone()).await {
+    // Use default index for testing
+    let search_manager = match SearchManager::open_readonly("default_index") {
         Ok(sm) => Arc::new(sm),
         Err(e) => {
             // Index creation can fail in test environment, that's okay
@@ -50,7 +51,7 @@ async fn test_server_info() {
         }
     };
 
-    let search_manager = match ReadOnlyIndexManager::new(reader.clone()).await {
+    let search_manager = match SearchManager::open_readonly("default_index") {
         Ok(sm) => Arc::new(sm),
         Err(_) => {
             println!("⚠️ Could not create search manager in test");

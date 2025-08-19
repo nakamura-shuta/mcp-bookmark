@@ -9,7 +9,7 @@ use bookmark::BookmarkReader;
 use config::Config;
 use mcp_server::BookmarkServer;
 use rmcp::{ServiceExt, transport::stdio};
-use search::{readonly_index::ReadOnlyIndexManager, search_manager_trait::SearchManagerTrait};
+use search::{SearchManager, search_manager_trait::SearchManagerTrait};
 use std::env;
 use std::sync::Arc;
 use tracing_appender::{non_blocking, rolling};
@@ -320,8 +320,7 @@ async fn main() -> Result<()> {
     tracing::debug!("Initializing search index...");
 
     let search_manager: Arc<dyn SearchManagerTrait> =
-        match ReadOnlyIndexManager::new_with_index_name(config.index_name.as_deref().unwrap()).await
-        {
+        match SearchManager::open_readonly(config.index_name.as_deref().unwrap()) {
             Ok(manager) => {
                 tracing::info!("Using index in read-only mode (lock-free)");
                 Arc::new(manager)
