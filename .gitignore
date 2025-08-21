@@ -5,6 +5,7 @@
 
 # Internal documentation
 /internal_docs
+/.work
 
 # Built binaries
 mcp-bookmark-darwin-*

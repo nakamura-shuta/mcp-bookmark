@@ -21,6 +21,8 @@
 
 ## Quick Start
 
+### Option 1: Build from Source (Requires Rust)
+
 ```bash
 git clone https://github.com/nakamura-shuta/mcp-bookmark.git
 cd mcp-bookmark
@@ -34,19 +36,86 @@ The install script will guide you through:
 3. **Creating your first index** - Using the Chrome extension to index bookmark folders
 4. **Generating .mcp.json** - With your chosen index name
 
+### Option 2: Use Pre-built Binaries (No Rust Required)
+
+1. Create a directory for the installation:
+```bash
+mkdir ~/mcp-bookmark
+cd ~/mcp-bookmark
+```
+
+2. Download pre-built binaries from the [latest release](https://github.com/nakamura-shuta/mcp-bookmark/releases/latest):
+
+#### macOS (Intel)
+```bash
+# Download binaries
+curl -L https://github.com/nakamura-shuta/mcp-bookmark/releases/latest/download/mcp-bookmark-darwin-x64 -o mcp-bookmark
+curl -L https://github.com/nakamura-shuta/mcp-bookmark/releases/latest/download/mcp-bookmark-darwin-x64-native -o mcp-bookmark-native
+chmod +x mcp-bookmark mcp-bookmark-native
+```
+
+#### macOS (Apple Silicon)
+```bash
+# Download binaries
+curl -L https://github.com/nakamura-shuta/mcp-bookmark/releases/latest/download/mcp-bookmark-darwin-arm64 -o mcp-bookmark
+curl -L https://github.com/nakamura-shuta/mcp-bookmark/releases/latest/download/mcp-bookmark-darwin-arm64-native -o mcp-bookmark-native
+chmod +x mcp-bookmark mcp-bookmark-native
+```
+
 ### Detailed Steps
 
-#### Step 1: Run the Install Script
+#### For Option 1: Building from Source
+
+##### Step 1: Run the Install Script
 
 The script will build everything and guide you through setup.
 
-#### Step 2: Install Chrome Extension (when prompted)
+#### For Option 2: Using Pre-built Binaries
 
+##### Step 1: Download and Setup Binaries
+
+After downloading the binaries as shown above, configure the native messaging host:
+
+```bash
+# Create native messaging host manifest (make sure you're in ~/mcp-bookmark directory)
+mkdir -p ~/Library/Application\ Support/Google/Chrome/NativeMessagingHosts/
+cat > ~/Library/Application\ Support/Google/Chrome/NativeMessagingHosts/com.mcp_bookmark.json << EOF
+{
+  "name": "com.mcp_bookmark",
+  "description": "MCP Bookmark Native Messaging Host",
+  "path": "$HOME/mcp-bookmark/mcp-bookmark-native",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://YOUR_EXTENSION_ID_HERE/"
+  ]
+}
+EOF
+```
+
+#### Step 2: Install Chrome Extension
+
+**For Option 1 (Built from source):**
 1. Open Chrome and go to `chrome://extensions/`
 2. Enable "Developer mode" (top right)
 3. Click "Load unpacked"
 4. Select `mcp-bookmark/bookmark-indexer-extension` folder
 5. Copy the Extension ID and paste it when prompted
+
+**For Option 2 (Pre-built):**
+1. Download the extension: 
+   ```bash
+   curl -L https://github.com/nakamura-shuta/mcp-bookmark/releases/latest/download/bookmark-indexer-chrome-extension.zip -o extension.zip
+   unzip extension.zip -d bookmark-indexer-extension
+   ```
+2. Open Chrome and go to `chrome://extensions/`
+3. Enable "Developer mode" (top right)
+4. Click "Load unpacked" and select the extracted `bookmark-indexer-extension` folder
+5. Copy the Extension ID
+6. Update the native messaging host manifest with the Extension ID:
+   ```bash
+   # Replace YOUR_EXTENSION_ID_HERE with the actual Extension ID
+   sed -i '' "s/YOUR_EXTENSION_ID_HERE/YOUR_ACTUAL_EXTENSION_ID/" ~/Library/Application\ Support/Google/Chrome/NativeMessagingHosts/com.mcp_bookmark.json
+   ```
 
 #### Step 3: Create Your First Index (when prompted)
 
@@ -58,8 +127,33 @@ The script will build everything and guide you through setup.
 
 #### Step 4: Complete Setup
 
+**For Option 1 (Built from source):**
 1. Enter the index name you just created
 2. Copy `.mcp.json` to your project:
+   ```bash
+   cp .mcp.json ~/your-project/
+   ```
+
+**For Option 2 (Pre-built):**
+1. Create `.mcp.json` configuration file (make sure you're in ~/mcp-bookmark directory):
+   ```bash
+   cat > .mcp.json << EOF
+   {
+     "mcpServers": {
+       "mcp-bookmark": {
+         "command": "$HOME/mcp-bookmark/mcp-bookmark",
+         "args": [],
+         "env": {
+           "RUST_LOG": "info",
+           "INDEX_NAME": "YOUR_INDEX_NAME"
+         }
+       }
+     }
+   }
+   EOF
+   ```
+2. Replace `YOUR_INDEX_NAME` with the index name you created in Step 3
+3. Copy to your project:
    ```bash
    cp .mcp.json ~/your-project/
    ```
@@ -87,12 +181,16 @@ The script will build everything and guide you through setup.
 
 ```bash
 # Run MCP server with specific index
+# For built from source:
 INDEX_NAME="work_Development" ./target/release/mcp-bookmark
 
+# For pre-built binaries (from ~/mcp-bookmark directory):
+INDEX_NAME="work_Development" ./mcp-bookmark
+
 # Index management commands
-./target/release/mcp-bookmark --list-indexes      # List all available indexes
-./target/release/mcp-bookmark --clear-index       # Clear current index
-./target/release/mcp-bookmark --clear-all-indexes # Clear all indexes
+./mcp-bookmark --list-indexes      # List all available indexes
+./mcp-bookmark --clear-index       # Clear current index  
+./mcp-bookmark --clear-all-indexes # Clear all indexes
 ```
 
 ## MCP Tools Available

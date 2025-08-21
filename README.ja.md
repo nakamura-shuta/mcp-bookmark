@@ -21,6 +21,8 @@
 
 ## クイックスタート
 
+### オプション 1: ソースからビルド（Rust 必須）
+
 ```bash
 git clone https://github.com/nakamura-shuta/mcp-bookmark.git
 cd mcp-bookmark
@@ -34,19 +36,86 @@ cd mcp-bookmark
 3. **最初のインデックス作成** - Chrome 拡張機能でブックマークフォルダをインデックス化
 4. **.mcp.json の生成** - 選択したインデックス名で設定ファイルを作成
 
+### オプション 2: ビルド済みバイナリを使用（Rust 不要）
+
+1. インストール用ディレクトリを作成：
+```bash
+mkdir ~/mcp-bookmark
+cd ~/mcp-bookmark
+```
+
+2. [最新リリース](https://github.com/nakamura-shuta/mcp-bookmark/releases/latest)からビルド済みバイナリをダウンロード：
+
+#### macOS (Intel)
+```bash
+# バイナリをダウンロード
+curl -L https://github.com/nakamura-shuta/mcp-bookmark/releases/latest/download/mcp-bookmark-darwin-x64 -o mcp-bookmark
+curl -L https://github.com/nakamura-shuta/mcp-bookmark/releases/latest/download/mcp-bookmark-darwin-x64-native -o mcp-bookmark-native
+chmod +x mcp-bookmark mcp-bookmark-native
+```
+
+#### macOS (Apple Silicon)
+```bash
+# バイナリをダウンロード
+curl -L https://github.com/nakamura-shuta/mcp-bookmark/releases/latest/download/mcp-bookmark-darwin-arm64 -o mcp-bookmark
+curl -L https://github.com/nakamura-shuta/mcp-bookmark/releases/latest/download/mcp-bookmark-darwin-arm64-native -o mcp-bookmark-native
+chmod +x mcp-bookmark mcp-bookmark-native
+```
+
 ### 詳細手順
 
-#### ステップ 1: インストールスクリプトを実行
+#### オプション 1: ソースからビルドする場合
+
+##### ステップ 1: インストールスクリプトを実行
 
 スクリプトがビルドとセットアップをガイドします。
 
-#### ステップ 2: Chrome 拡張機能をインストール（プロンプトが表示されたら）
+#### オプション 2: ビルド済みバイナリを使用する場合
 
+##### ステップ 1: バイナリのダウンロードとセットアップ
+
+上記のコマンドでバイナリをダウンロードした後、ネイティブメッセージングホストを設定：
+
+```bash
+# ネイティブメッセージングホストのマニフェストを作成（~/mcp-bookmark ディレクトリにいることを確認）
+mkdir -p ~/Library/Application\ Support/Google/Chrome/NativeMessagingHosts/
+cat > ~/Library/Application\ Support/Google/Chrome/NativeMessagingHosts/com.mcp_bookmark.json << EOF
+{
+  "name": "com.mcp_bookmark",
+  "description": "MCP Bookmark Native Messaging Host",
+  "path": "$HOME/mcp-bookmark/mcp-bookmark-native",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://YOUR_EXTENSION_ID_HERE/"
+  ]
+}
+EOF
+```
+
+#### ステップ 2: Chrome 拡張機能をインストール
+
+**オプション 1（ソースからビルド）の場合：**
 1. Chrome で `chrome://extensions/` を開く
 2. 「デベロッパーモード」を有効化（右上）
 3. 「パッケージ化されていない拡張機能を読み込む」をクリック
 4. `mcp-bookmark/bookmark-indexer-extension` フォルダを選択
 5. Extension ID をコピーして、プロンプトに貼り付け
+
+**オプション 2（ビルド済み）の場合：**
+1. 拡張機能をダウンロード：
+   ```bash
+   curl -L https://github.com/nakamura-shuta/mcp-bookmark/releases/latest/download/bookmark-indexer-chrome-extension.zip -o extension.zip
+   unzip extension.zip -d bookmark-indexer-extension
+   ```
+2. Chrome で `chrome://extensions/` を開く
+3. 「デベロッパーモード」を有効化（右上）
+4. 「パッケージ化されていない拡張機能を読み込む」をクリックし、展開した `bookmark-indexer-extension` フォルダを選択
+5. Extension ID をコピー
+6. ネイティブメッセージングホストのマニフェストを Extension ID で更新：
+   ```bash
+   # YOUR_EXTENSION_ID_HERE を実際の Extension ID に置き換え
+   sed -i '' "s/YOUR_EXTENSION_ID_HERE/実際のExtension ID/" ~/Library/Application\ Support/Google/Chrome/NativeMessagingHosts/com.mcp_bookmark.json
+   ```
 
 #### ステップ 3: 最初のインデックスを作成（プロンプトが表示されたら）
 
@@ -58,8 +127,33 @@ cd mcp-bookmark
 
 #### ステップ 4: セットアップを完了
 
+**オプション 1（ソースからビルド）の場合：**
 1. 作成したインデックス名を入力
 2. `.mcp.json` をプロジェクトにコピー：
+   ```bash
+   cp .mcp.json ~/your-project/
+   ```
+
+**オプション 2（ビルド済み）の場合：**
+1. `.mcp.json` 設定ファイルを作成（~/mcp-bookmark ディレクトリにいることを確認）：
+   ```bash
+   cat > .mcp.json << EOF
+   {
+     "mcpServers": {
+       "mcp-bookmark": {
+         "command": "$HOME/mcp-bookmark/mcp-bookmark",
+         "args": [],
+         "env": {
+           "RUST_LOG": "info",
+           "INDEX_NAME": "YOUR_INDEX_NAME"
+         }
+       }
+     }
+   }
+   EOF
+   ```
+2. `YOUR_INDEX_NAME` をステップ 3 で作成したインデックス名に置き換え
+3. プロジェクトにコピー：
    ```bash
    cp .mcp.json ~/your-project/
    ```
@@ -87,12 +181,16 @@ cd mcp-bookmark
 
 ```bash
 # 特定のインデックスで MCP サーバーを実行
+# ソースからビルドした場合：
 INDEX_NAME="work_Development" ./target/release/mcp-bookmark
 
+# ビルド済みバイナリの場合（~/mcp-bookmark ディレクトリから）：
+INDEX_NAME="work_Development" ./mcp-bookmark
+
 # インデックス管理コマンド
-./target/release/mcp-bookmark --list-indexes      # 利用可能なインデックス一覧
-./target/release/mcp-bookmark --clear-index       # 現在のインデックスをクリア
-./target/release/mcp-bookmark --clear-all-indexes # すべてのインデックスをクリア
+./mcp-bookmark --list-indexes      # 利用可能なインデックス一覧
+./mcp-bookmark --clear-index       # 現在のインデックスをクリア
+./mcp-bookmark --clear-all-indexes # すべてのインデックスをクリア
 ```
 
 ## 利用可能な MCP ツール
