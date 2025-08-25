@@ -8,6 +8,11 @@
 - MultiIndexSearchManager for parallel searching across multiple indices
 - URL deduplication and score-based result merging
 - Documentation updates for multi-index search feature
+- Phrase search support with quoted queries
+  - Exact phrase matching with quotes (e.g., "React hooks")
+  - Mixed phrase and word queries
+  - Support for special characters and Japanese text in phrases
+- QueryParser module for parsing search queries with phrase detection
 
 ## [v0.4.0] - 2025-08-19
 

@@ -218,6 +218,35 @@ impl SearchManager {
         Ok(())
     }
 
+    /// Create a new search manager for testing
+    pub fn new_for_testing<P: AsRef<Path>>(index_path: P) -> Result<Self> {
+        let index_path = index_path.as_ref().to_path_buf();
+
+        // Ensure directory exists
+        std::fs::create_dir_all(&index_path)?;
+
+        let schema = BookmarkSchema::new();
+        let index = Index::create_in_dir(&index_path, schema.schema.clone())?;
+
+        // Register tokenizer
+        register_lindera_tokenizer(&index)?;
+
+        let indexer = BookmarkIndexer::new(index.clone(), schema.clone());
+        let writer = index.writer(DEFAULT_WRITER_HEAP_SIZE)?;
+        let searcher = UnifiedSearcher::new(index.clone(), schema.clone())?;
+
+        Ok(Self {
+            index: Some(index),
+            schema: Some(schema),
+            indexer: Some(indexer),
+            searcher,
+            index_path,
+            writer: Some(writer),
+            indexing_status: Arc::new(IndexingStatus::new(0)),
+            read_only: false,
+        })
+    }
+
     /// Index a single bookmark
     pub fn index_bookmark(&mut self, bookmark: &FlatBookmark) -> Result<()> {
         if self.read_only {
@@ -225,6 +254,21 @@ impl SearchManager {
         }
         if let (Some(writer), Some(indexer)) = (&mut self.writer, &self.indexer) {
             indexer.index_bookmark(writer, bookmark, None)?;
+        }
+        Ok(())
+    }
+
+    /// Index a single bookmark with content
+    pub fn index_bookmark_with_content(
+        &mut self,
+        bookmark: &FlatBookmark,
+        content: Option<&str>,
+    ) -> Result<()> {
+        if self.read_only {
+            return Err(anyhow::anyhow!("Cannot index bookmark in read-only mode"));
+        }
+        if let (Some(writer), Some(indexer)) = (&mut self.writer, &self.indexer) {
+            indexer.index_bookmark(writer, bookmark, content)?;
         }
         Ok(())
     }

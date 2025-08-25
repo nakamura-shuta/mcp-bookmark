@@ -5,12 +5,15 @@ use tantivy::{
     Index, IndexReader, TantivyDocument, Term,
     collector::TopDocs,
     directory::MmapDirectory,
-    query::{BooleanQuery, BoostQuery, Occur, Query, QueryParser, TermQuery},
+    query::{
+        BooleanQuery, BoostQuery, EmptyQuery, Occur, PhraseQuery, Query, QueryParser, TermQuery,
+    },
     schema::Value,
 };
 use tracing::debug;
 
 use super::common::{INDEX_METADATA_FILE, doc_to_result};
+use super::query_parser::{QueryParser as CustomQueryParser, QueryTerm};
 use super::schema::BookmarkSchema;
 use super::scored_snippet::ScoredSnippetGenerator;
 use super::tokenizer::register_lindera_tokenizer;
@@ -202,42 +205,179 @@ impl UnifiedSearcher {
         })
     }
 
-    /// Create a simple query without boosting
+    /// Create a simple query without boosting (supports phrases)
     fn create_simple_query(&self, query: &str) -> Result<Box<dyn Query>> {
-        let text_fields = self.schema.text_fields();
-        let query_parser = QueryParser::for_index(&self.index, text_fields);
-        query_parser
-            .parse_query(query)
-            .context("Failed to parse query")
-    }
+        // Check for empty query first
+        if query.trim().is_empty() {
+            // Return a query that matches nothing
+            return Ok(Box::new(tantivy::query::EmptyQuery));
+        }
 
-    /// Create a boosted query with field-specific weights
-    fn create_boosted_query(&self, query: &str) -> Result<Box<dyn Query>> {
+        let terms = CustomQueryParser::parse(query);
+
+        if terms.is_empty() {
+            // If parser returns no terms, return empty query
+            return Ok(Box::new(tantivy::query::EmptyQuery));
+        }
+
+        let text_fields = self.schema.text_fields();
         let mut subqueries: Vec<(Occur, Box<dyn Query>)> = Vec::new();
 
-        // Title query with 3x boost
-        let title_parser = QueryParser::for_index(&self.index, vec![self.schema.title]);
-        if let Ok(title_query) = title_parser.parse_query(query) {
-            let boosted_title_query = Box::new(BoostQuery::new(title_query, 3.0));
-            subqueries.push((Occur::Should, boosted_title_query));
+        for term in terms {
+            match term {
+                QueryTerm::Phrase(phrase) => {
+                    // Skip empty phrases
+                    if phrase.trim().is_empty() {
+                        continue;
+                    }
+
+                    // Create phrase query for each text field
+                    let mut phrase_subqueries = Vec::new();
+
+                    for field in &text_fields {
+                        if let Ok(phrase_query) = self.create_phrase_query(*field, &phrase) {
+                            phrase_subqueries.push((Occur::Should, phrase_query));
+                        }
+                    }
+
+                    if !phrase_subqueries.is_empty() {
+                        let combined_phrase_query = Box::new(BooleanQuery::new(phrase_subqueries));
+                        subqueries.push((Occur::Must, combined_phrase_query));
+                    }
+                }
+                QueryTerm::Word(word) => {
+                    // Skip empty words
+                    if word.trim().is_empty() {
+                        continue;
+                    }
+
+                    // Use regular query parser for individual words
+                    let query_parser = QueryParser::for_index(&self.index, text_fields.clone());
+                    if let Ok(word_query) = query_parser.parse_query(&word) {
+                        subqueries.push((Occur::Should, word_query));
+                    }
+                }
+            }
         }
 
-        // URL query with 2x boost
-        let url_parser = QueryParser::for_index(&self.index, vec![self.schema.url]);
-        if let Ok(url_query) = url_parser.parse_query(query) {
-            let boosted_url_query = Box::new(BoostQuery::new(url_query, 2.0));
-            subqueries.push((Occur::Should, boosted_url_query));
-        }
-
-        // Content query with normal weight (1x)
-        let content_parser = QueryParser::for_index(&self.index, vec![self.schema.content]);
-        if let Ok(content_query) = content_parser.parse_query(query) {
-            subqueries.push((Occur::Should, content_query));
-        }
-
-        // Combine or fallback
         if subqueries.is_empty() {
-            self.create_simple_query(query)
+            // If all terms were empty, return empty query
+            Ok(Box::new(tantivy::query::EmptyQuery))
+        } else if subqueries.len() == 1 {
+            Ok(subqueries.into_iter().next().unwrap().1)
+        } else {
+            Ok(Box::new(BooleanQuery::new(subqueries)))
+        }
+    }
+
+    /// Create a phrase query for a specific field
+    fn create_phrase_query(
+        &self,
+        field: tantivy::schema::Field,
+        phrase: &str,
+    ) -> Result<Box<dyn Query>> {
+        // Tokenize the phrase to get individual terms
+        let mut tokenizer = self
+            .index
+            .tokenizers()
+            .get("lang_ja")
+            .ok_or_else(|| anyhow::anyhow!("Tokenizer not found"))?;
+
+        let mut token_stream = tokenizer.token_stream(phrase);
+        let mut terms = Vec::new();
+
+        while let Some(token) = token_stream.next() {
+            let term = Term::from_field_text(field, &token.text);
+            terms.push(term);
+        }
+
+        if terms.is_empty() {
+            return Err(anyhow::anyhow!("No terms found in phrase"));
+        }
+
+        Ok(Box::new(PhraseQuery::new(terms)))
+    }
+
+    /// Create a boosted query with field-specific weights (supports phrases)
+    fn create_boosted_query(&self, query: &str) -> Result<Box<dyn Query>> {
+        // Check for empty query first
+        if query.trim().is_empty() {
+            return Ok(Box::new(EmptyQuery));
+        }
+
+        let terms = CustomQueryParser::parse(query);
+
+        if terms.is_empty() {
+            return Ok(Box::new(EmptyQuery));
+        }
+
+        let mut subqueries: Vec<(Occur, Box<dyn Query>)> = Vec::new();
+
+        for term in terms {
+            match term {
+                QueryTerm::Phrase(phrase) => {
+                    // Skip empty phrases
+                    if phrase.trim().is_empty() {
+                        continue;
+                    }
+
+                    // Create boosted phrase queries for fields that support position indexing
+                    // URL field is STRING type and doesn't support phrase queries
+                    let mut phrase_field_queries: Vec<(Occur, Box<dyn Query>)> = Vec::new();
+
+                    if let Ok(title_phrase) = self.create_phrase_query(self.schema.title, &phrase) {
+                        let boosted_title: Box<dyn Query> =
+                            Box::new(BoostQuery::new(title_phrase, 3.0));
+                        phrase_field_queries.push((Occur::Should, boosted_title));
+                    }
+
+                    if let Ok(content_phrase) =
+                        self.create_phrase_query(self.schema.content, &phrase)
+                    {
+                        let content_query: Box<dyn Query> = content_phrase;
+                        phrase_field_queries.push((Occur::Should, content_query));
+                    }
+
+                    // The phrase must be found in at least one field
+                    if !phrase_field_queries.is_empty() {
+                        let combined_phrase_query =
+                            Box::new(BooleanQuery::new(phrase_field_queries));
+                        subqueries.push((Occur::Must, combined_phrase_query));
+                    }
+                }
+                QueryTerm::Word(word) => {
+                    // Skip empty words
+                    if word.trim().is_empty() {
+                        continue;
+                    }
+
+                    // Title query with 3x boost
+                    let title_parser = QueryParser::for_index(&self.index, vec![self.schema.title]);
+                    if let Ok(title_query) = title_parser.parse_query(&word) {
+                        let boosted_title_query = Box::new(BoostQuery::new(title_query, 3.0));
+                        subqueries.push((Occur::Should, boosted_title_query));
+                    }
+
+                    // URL query with 2x boost
+                    let url_parser = QueryParser::for_index(&self.index, vec![self.schema.url]);
+                    if let Ok(url_query) = url_parser.parse_query(&word) {
+                        let boosted_url_query = Box::new(BoostQuery::new(url_query, 2.0));
+                        subqueries.push((Occur::Should, boosted_url_query));
+                    }
+
+                    // Content query with normal weight (1x)
+                    let content_parser =
+                        QueryParser::for_index(&self.index, vec![self.schema.content]);
+                    if let Ok(content_query) = content_parser.parse_query(&word) {
+                        subqueries.push((Occur::Should, content_query));
+                    }
+                }
+            }
+        }
+
+        // Combine or return empty query
+        if subqueries.is_empty() {
+            Ok(Box::new(EmptyQuery))
         } else {
             Ok(Box::new(BooleanQuery::new(subqueries)))
         }
@@ -336,6 +476,8 @@ pub struct IndexStats {
 mod tests {
     use super::*;
     use crate::search::schema::BookmarkSchema;
+    use crate::search::tokenizer::register_lindera_tokenizer;
+    use tantivy::doc;
     use tempfile::TempDir;
 
     #[test]
@@ -353,5 +495,158 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let result = UnifiedSearcher::open_readonly(temp_dir.path());
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_phrase_search() {
+        let temp_dir = TempDir::new().unwrap();
+        let schema = BookmarkSchema::new();
+        let index = Index::create_in_dir(temp_dir.path(), schema.schema.clone()).unwrap();
+
+        // Register tokenizer
+        register_lindera_tokenizer(&index).unwrap();
+
+        // Index some test documents
+        let mut index_writer = index.writer(50_000_000).unwrap();
+
+        // Document with exact phrase "React hooks"
+        index_writer.add_document(doc!(
+            schema.id => "1",
+            schema.title => "React hooks documentation",
+            schema.url => "https://example.com/react-hooks",
+            schema.content => "Learn about React hooks and how to use them in functional components.",
+            schema.folder_path => "docs"
+        )).unwrap();
+
+        // Document with words but not as a phrase
+        index_writer
+            .add_document(doc!(
+                schema.id => "2",
+                schema.title => "Vue composition API",
+                schema.url => "https://example.com/vue",
+                schema.content => "React is great. Also, custom hooks are useful in many cases.",
+                schema.folder_path => "docs"
+            ))
+            .unwrap();
+
+        // Document without either word
+        index_writer
+            .add_document(doc!(
+                schema.id => "3",
+                schema.title => "Angular guide",
+                schema.url => "https://example.com/angular",
+                schema.content => "Angular uses components and services.",
+                schema.folder_path => "docs"
+            ))
+            .unwrap();
+
+        index_writer.commit().unwrap();
+
+        // Create searcher
+        let searcher = UnifiedSearcher::new(index, schema).unwrap();
+
+        // Test phrase search
+        let results = searcher.search("\"React hooks\"", 10).unwrap();
+        assert_eq!(
+            results.len(),
+            1,
+            "Should find exactly one document with the phrase 'React hooks'"
+        );
+        assert_eq!(results[0].id, "1");
+
+        // Test regular word search (should find both documents with either word)
+        let results = searcher.search("React hooks", 10).unwrap();
+        assert!(
+            results.len() >= 2,
+            "Should find documents containing 'React' or 'hooks'"
+        );
+    }
+
+    #[test]
+    fn test_mixed_phrase_and_word_search() {
+        let temp_dir = TempDir::new().unwrap();
+        let schema = BookmarkSchema::new();
+        let index = Index::create_in_dir(temp_dir.path(), schema.schema.clone()).unwrap();
+
+        // Register tokenizer
+        register_lindera_tokenizer(&index).unwrap();
+
+        // Index test documents
+        let mut index_writer = index.writer(50_000_000).unwrap();
+
+        index_writer.add_document(doc!(
+            schema.id => "1",
+            schema.title => "React Server Components and useState",
+            schema.url => "https://example.com/rsc",
+            schema.content => "Learn about React Server Components and how they work with useState.",
+            schema.folder_path => "docs"
+        )).unwrap();
+
+        index_writer.add_document(doc!(
+            schema.id => "2",
+            schema.title => "React basics",
+            schema.url => "https://example.com/react",
+            schema.content => "Server side rendering. Components are building blocks. No useState here.",
+            schema.folder_path => "docs"
+        )).unwrap();
+
+        index_writer.commit().unwrap();
+
+        let searcher = UnifiedSearcher::new(index, schema).unwrap();
+
+        // Search for phrase "React Server Components" and word "useState"
+        let results = searcher
+            .search("\"React Server Components\" useState", 10)
+            .unwrap();
+        assert_eq!(
+            results.len(),
+            1,
+            "Should find document with exact phrase and word"
+        );
+        assert_eq!(results[0].id, "1");
+    }
+
+    #[test]
+    fn test_japanese_phrase_search() {
+        let temp_dir = TempDir::new().unwrap();
+        let schema = BookmarkSchema::new();
+        let index = Index::create_in_dir(temp_dir.path(), schema.schema.clone()).unwrap();
+
+        // Register tokenizer
+        register_lindera_tokenizer(&index).unwrap();
+
+        // Index Japanese documents
+        let mut index_writer = index.writer(50_000_000).unwrap();
+
+        index_writer
+            .add_document(doc!(
+                schema.id => "1",
+                schema.title => "React フックの使い方",
+                schema.url => "https://example.com/react-hooks-ja",
+                schema.content => "React フックを使用して状態管理を行う方法を学びます。",
+                schema.folder_path => "docs"
+            ))
+            .unwrap();
+
+        index_writer
+            .add_document(doc!(
+                schema.id => "2",
+                schema.title => "Reactの基礎",
+                schema.url => "https://example.com/react-basic",
+                schema.content => "Reactは素晴らしい。フックも便利です。",
+                schema.folder_path => "docs"
+            ))
+            .unwrap();
+
+        index_writer.commit().unwrap();
+
+        let searcher = UnifiedSearcher::new(index, schema).unwrap();
+
+        // Search for Japanese phrase
+        let results = searcher.search("\"React フック\"", 10).unwrap();
+        assert!(
+            results.len() >= 1,
+            "Should find documents with Japanese phrase"
+        );
     }
 }

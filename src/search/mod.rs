@@ -3,6 +3,7 @@ pub mod common;
 pub mod content_index;
 pub mod indexer;
 pub mod multi_index;
+pub mod query_parser;
 pub mod schema;
 pub mod scored_snippet;
 pub mod search_manager;

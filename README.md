@@ -15,6 +15,7 @@
 ## Features
 
 - **Full-Text Search**: Search bookmark content using Tantivy search engine
+- **Phrase Search**: Use quotes for exact phrase matching (e.g., "React hooks")
 - **Chrome Extension**: Index bookmark content directly from browser
 - **Custom Indexes**: Create and manage multiple independent indexes
 - **Folder Filtering**: Expose only specific bookmark folders
@@ -199,6 +200,7 @@ INDEX_NAME="work,personal,research" ./mcp-bookmark
 ## MCP Tools Available
 
 - `search_bookmarks_fulltext` - Full-text content search (searches titles, URLs, and page content)
+  - Supports phrase search with quotes (e.g., "exact phrase")
   - Returns preview snippets (300 chars) for quick identification
   - Automatically limited to prevent token overflow
   - Use `limit` parameter to control result count
