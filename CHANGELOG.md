@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [v0.4.1] - 2025-08-25
+
 ### Added
 
 - Multi-index search support with comma-separated INDEX_NAME
