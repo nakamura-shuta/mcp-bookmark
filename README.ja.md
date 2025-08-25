@@ -187,6 +187,9 @@ INDEX_NAME="work_Development" ./target/release/mcp-bookmark
 # ビルド済みバイナリの場合（~/mcp-bookmark ディレクトリから）：
 INDEX_NAME="work_Development" ./mcp-bookmark
 
+# 複数インデックス検索（カンマ区切り）
+INDEX_NAME="work,personal,research" ./mcp-bookmark
+
 # インデックス管理コマンド
 ./mcp-bookmark --list-indexes      # 利用可能なインデックス一覧
 ./mcp-bookmark --clear-index       # 現在のインデックスをクリア

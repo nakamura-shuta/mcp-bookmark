@@ -187,6 +187,9 @@ INDEX_NAME="work_Development" ./target/release/mcp-bookmark
 # For pre-built binaries (from ~/mcp-bookmark directory):
 INDEX_NAME="work_Development" ./mcp-bookmark
 
+# Multi-index search (comma-separated)
+INDEX_NAME="work,personal,research" ./mcp-bookmark
+
 # Index management commands
 ./mcp-bookmark --list-indexes      # List all available indexes
 ./mcp-bookmark --clear-index       # Clear current index  
