@@ -47,7 +47,11 @@ impl ContentIndexManager {
         let mut search_manager = if reader.config.is_multi_index() {
             // For multi-index, we'll handle this differently in main.rs
             // For now, just use the first index
-            let first_index = reader.config.parse_index_names().into_iter().next()
+            let first_index = reader
+                .config
+                .parse_index_names()
+                .into_iter()
+                .next()
                 .ok_or_else(|| anyhow::anyhow!("No index names provided"))?;
             let mut config = reader.config.clone();
             config.index_name = Some(first_index);

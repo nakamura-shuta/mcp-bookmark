@@ -7,6 +7,7 @@
 - Multi-index search support with comma-separated INDEX_NAME
 - MultiIndexSearchManager for parallel searching across multiple indices
 - URL deduplication and score-based result merging
+- Documentation updates for multi-index search feature
 
 ## [v0.4.0] - 2025-08-19
 

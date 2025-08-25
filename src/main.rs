@@ -9,7 +9,7 @@ use bookmark::BookmarkReader;
 use config::Config;
 use mcp_server::BookmarkServer;
 use rmcp::{ServiceExt, transport::stdio};
-use search::{SearchManager, MultiIndexSearchManager, search_manager_trait::SearchManagerTrait};
+use search::{MultiIndexSearchManager, SearchManager, search_manager_trait::SearchManagerTrait};
 use std::env;
 use std::sync::Arc;
 use tracing_appender::{non_blocking, rolling};
@@ -332,7 +332,9 @@ async fn main() -> Result<()> {
                 tracing::error!("Failed to initialize multi-index search: {}", e);
                 eprintln!("Error: Failed to initialize multi-index search: {}", e);
                 eprintln!("\nPlease check:");
-                eprintln!("  1. All specified indices exist (use --list-indexes to see available indexes)");
+                eprintln!(
+                    "  1. All specified indices exist (use --list-indexes to see available indexes)"
+                );
                 eprintln!("  2. The indices were created using the Chrome extension");
                 eprintln!("  3. The index names are correct");
                 std::process::exit(1);
