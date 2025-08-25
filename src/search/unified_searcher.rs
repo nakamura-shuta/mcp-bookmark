@@ -205,18 +205,25 @@ impl UnifiedSearcher {
         })
     }
 
-    /// Create a simple query without boosting (supports phrases)
-    fn create_simple_query(&self, query: &str) -> Result<Box<dyn Query>> {
+    /// Parse query and return terms, or empty query if needed
+    fn parse_query_terms(&self, query: &str) -> Result<(Vec<QueryTerm>, bool)> {
         // Check for empty query first
         if query.trim().is_empty() {
-            // Return a query that matches nothing
-            return Ok(Box::new(tantivy::query::EmptyQuery));
+            return Ok((Vec::new(), true));
         }
 
         let terms = CustomQueryParser::parse(query);
-
         if terms.is_empty() {
-            // If parser returns no terms, return empty query
+            return Ok((Vec::new(), true));
+        }
+
+        Ok((terms, false))
+    }
+
+    /// Create a simple query without boosting (supports phrases)
+    fn create_simple_query(&self, query: &str) -> Result<Box<dyn Query>> {
+        let (terms, should_return_empty) = self.parse_query_terms(query)?;
+        if should_return_empty {
             return Ok(Box::new(tantivy::query::EmptyQuery));
         }
 
@@ -300,14 +307,8 @@ impl UnifiedSearcher {
 
     /// Create a boosted query with field-specific weights (supports phrases)
     fn create_boosted_query(&self, query: &str) -> Result<Box<dyn Query>> {
-        // Check for empty query first
-        if query.trim().is_empty() {
-            return Ok(Box::new(EmptyQuery));
-        }
-
-        let terms = CustomQueryParser::parse(query);
-
-        if terms.is_empty() {
+        let (terms, should_return_empty) = self.parse_query_terms(query)?;
+        if should_return_empty {
             return Ok(Box::new(EmptyQuery));
         }
 

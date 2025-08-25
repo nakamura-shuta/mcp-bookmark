@@ -1,6 +1,5 @@
 // Module declarations
 pub mod common;
-pub mod content_index;
 pub mod indexer;
 pub mod multi_index;
 pub mod query_parser;
@@ -15,5 +14,4 @@ pub mod unified_searcher;
 pub use multi_index::MultiIndexSearchManager;
 pub use schema::BookmarkSchema;
 pub use search_manager::SearchManager;
-pub use search_manager_trait::SearchManagerTrait;
 pub use unified_searcher::{SearchParams, SearchResult};

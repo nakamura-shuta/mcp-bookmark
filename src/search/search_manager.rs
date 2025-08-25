@@ -39,8 +39,11 @@ pub struct IndexStats {
 
 /// Main search manager that coordinates indexing and searching
 pub struct SearchManager {
-    index: Option<Index>,             // None for read-only mode
-    schema: Option<BookmarkSchema>,   // None for read-only mode
+    #[allow(dead_code)]
+    index: Option<Index>, // None for read-only mode
+    #[allow(dead_code)]
+    schema: Option<BookmarkSchema>, // None for read-only mode
+    #[allow(dead_code)]
     indexer: Option<BookmarkIndexer>, // None for read-only mode
     searcher: UnifiedSearcher,
     index_path: PathBuf,
