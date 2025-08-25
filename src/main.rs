@@ -9,7 +9,7 @@ use bookmark::BookmarkReader;
 use config::Config;
 use mcp_server::BookmarkServer;
 use rmcp::{ServiceExt, transport::stdio};
-use search::{SearchManager, search_manager_trait::SearchManagerTrait};
+use search::{SearchManager, MultiIndexSearchManager, search_manager_trait::SearchManagerTrait};
 use std::env;
 use std::sync::Arc;
 use tracing_appender::{non_blocking, rolling};
@@ -319,7 +319,27 @@ async fn main() -> Result<()> {
     // Initialize search manager (always use read-only mode for pre-built indexes)
     tracing::debug!("Initializing search index...");
 
-    let search_manager: Arc<dyn SearchManagerTrait> =
+    let search_manager: Arc<dyn SearchManagerTrait> = if config.is_multi_index() {
+        // Use multi-index search manager
+        tracing::info!("Initializing multi-index search");
+        match MultiIndexSearchManager::new(&config) {
+            Ok(manager) => {
+                let status = manager.get_indexing_status_string();
+                tracing::info!("{}", status);
+                Arc::new(manager)
+            }
+            Err(e) => {
+                tracing::error!("Failed to initialize multi-index search: {}", e);
+                eprintln!("Error: Failed to initialize multi-index search: {}", e);
+                eprintln!("\nPlease check:");
+                eprintln!("  1. All specified indices exist (use --list-indexes to see available indexes)");
+                eprintln!("  2. The indices were created using the Chrome extension");
+                eprintln!("  3. The index names are correct");
+                std::process::exit(1);
+            }
+        }
+    } else {
+        // Single index mode
         match SearchManager::open_readonly(config.index_name.as_deref().unwrap()) {
             Ok(manager) => {
                 tracing::info!("Using index in read-only mode (lock-free)");
@@ -338,7 +358,8 @@ async fn main() -> Result<()> {
                 eprintln!("  3. The index name is correct");
                 std::process::exit(1);
             }
-        };
+        }
+    };
 
     tracing::info!("Server ready");
     tracing::info!("{}", search_manager.get_indexing_status());

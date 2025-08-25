@@ -10,3 +10,24 @@ pub struct Config {
     #[serde(default)]
     pub max_bookmarks: usize,
 }
+
+impl Config {
+    /// Parse index names from comma-separated string
+    pub fn parse_index_names(&self) -> Vec<String> {
+        self.index_name
+            .as_ref()
+            .map(|s| {
+                s.split(',')
+                    .map(|name| name.trim())
+                    .filter(|name| !name.is_empty())
+                    .map(|name| name.to_string())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Check if multiple indices are configured
+    pub fn is_multi_index(&self) -> bool {
+        self.parse_index_names().len() > 1
+    }
+}
