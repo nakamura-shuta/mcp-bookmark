@@ -1,10 +1,11 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::OpenOptions;
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
+use std::time::Instant;
 
 // Import Tantivy integration from main crate
 use mcp_bookmark::bookmark::FlatBookmark;
@@ -47,10 +48,21 @@ struct IndexMetadata {
     last_full_sync: u64,
 }
 
+// Batch processing state
+#[derive(Debug)]
+struct BatchState {
+    batch_id: String,
+    total: usize,
+    received: HashSet<usize>,
+    bookmarks: Vec<(FlatBookmark, Option<String>)>,
+    start_time: Instant,
+}
+
 struct NativeMessagingHost {
     indexer: Option<BookmarkIndexer>,
     index_name: String,
     metadata: Option<IndexMetadata>,
+    batches: HashMap<String, BatchState>,
 }
 
 impl NativeMessagingHost {
@@ -59,6 +71,7 @@ impl NativeMessagingHost {
             indexer: None,
             index_name: "Extension_Bookmarks".to_string(),
             metadata: None,
+            batches: HashMap::new(),
         }
     }
 
@@ -223,6 +236,12 @@ impl NativeMessagingHost {
             "sync_bookmarks" => self.sync_bookmarks(message["params"].clone(), id),
 
             "check_for_updates" => self.check_for_updates(message["params"].clone(), id),
+            
+            // Batch processing methods
+            "batch_start" => self.batch_start(message["params"].clone(), id),
+            "batch_add" => self.batch_add(message["params"].clone(), id),
+            "batch_end" => self.batch_end(message["params"].clone(), id),
+            "progress" => self.handle_progress(message["params"].clone(), id),
 
             // Legacy MCP methods for compatibility
             "initialize" => {
@@ -563,6 +582,242 @@ impl NativeMessagingHost {
                 "bookmark_count": self.metadata.as_ref().map(|m| m.bookmarks.len()).unwrap_or(0)
             }
         })
+    }
+    
+    // Batch processing methods
+    fn batch_start(&mut self, params: Value, id: Value) -> Value {
+        let batch_id = params["batch_id"].as_str().unwrap_or("").to_string();
+        let total = params["total"].as_u64().unwrap_or(0) as usize;
+        
+        // Update index name if provided
+        if let Some(index_name) = params["index_name"].as_str() {
+            self.index_name = index_name.to_string();
+            log_to_file(&format!("Batch using index: {}", self.index_name));
+        }
+        
+        if batch_id.is_empty() || total == 0 {
+            return json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "error": {
+                    "code": -32602,
+                    "message": "Invalid batch parameters"
+                }
+            });
+        }
+        
+        // Initialize indexer if needed
+        if self.indexer.is_none() {
+            if let Err(e) = self.init_tantivy() {
+                return json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "error": {
+                        "code": -32603,
+                        "message": format!("Failed to initialize index: {}", e)
+                    }
+                });
+            }
+        }
+        
+        // Create batch state
+        let batch = BatchState {
+            batch_id: batch_id.clone(),
+            total,
+            received: HashSet::new(),
+            bookmarks: Vec::with_capacity(total),
+            start_time: Instant::now(),
+        };
+        
+        self.batches.insert(batch_id.clone(), batch);
+        log_to_file(&format!("Started batch {} with {} bookmarks", batch_id, total));
+        
+        json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "result": {
+                "status": "started",
+                "batch_id": batch_id
+            }
+        })
+    }
+    
+    fn batch_add(&mut self, params: Value, id: Value) -> Value {
+        let batch_id = params["batch_id"].as_str().unwrap_or("").to_string();
+        let index = params["index"].as_u64().unwrap_or(0) as usize;
+        
+        // Parse bookmark
+        let bookmark = FlatBookmark {
+            id: params["bookmark"]["id"].as_str().unwrap_or("").to_string(),
+            name: params["bookmark"]["name"].as_str().unwrap_or("").to_string(),
+            url: params["bookmark"]["url"].as_str().unwrap_or("").to_string(),
+            folder_path: params["bookmark"]["folder_path"]
+                .as_array()
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str())
+                        .map(String::from)
+                        .collect()
+                })
+                .unwrap_or_default(),
+            date_added: params["bookmark"]["date_added"].as_str().map(String::from),
+            date_modified: params["bookmark"]["date_modified"].as_str().map(String::from),
+        };
+        
+        let content = params["content"].as_str().map(String::from);
+        
+        // Add to batch
+        if let Some(batch) = self.batches.get_mut(&batch_id) {
+            if batch.received.contains(&index) {
+                log_to_file(&format!("Duplicate index {} in batch {}", index, batch_id));
+                return json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": {"status": "duplicate"}
+                });
+            }
+            
+            batch.received.insert(index);
+            batch.bookmarks.push((bookmark, content));
+            
+            // Check if we should commit (buffer full or complete)
+            let should_commit = batch.bookmarks.len() >= 50 || batch.received.len() == batch.total;
+            let received_count = batch.received.len();
+            let total_count = batch.total;
+            
+            if should_commit {
+                let batch_id_clone = batch_id.clone();
+                drop(batch); // Release the mutable borrow
+                self.commit_batch_bookmarks(&batch_id_clone);
+            }
+            
+            json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "result": {
+                    "status": "added",
+                    "received": received_count,
+                    "total": total_count
+                }
+            })
+        } else {
+            json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "error": {
+                    "code": -32602,
+                    "message": format!("Batch {} not found", batch_id)
+                }
+            })
+        }
+    }
+    
+    fn batch_end(&mut self, params: Value, id: Value) -> Value {
+        let batch_id = params["batch_id"].as_str().unwrap_or("").to_string();
+        
+        if let Some(mut batch) = self.batches.remove(&batch_id) {
+            // Commit remaining bookmarks
+            if !batch.bookmarks.is_empty() {
+                self.commit_batch_bookmarks_internal(&mut batch);
+            }
+            
+            let duration = batch.start_time.elapsed();
+            let total = batch.total;
+            let received = batch.received.len();
+            
+            log_to_file(&format!(
+                "Batch {} completed: {}/{} bookmarks in {:?}",
+                batch_id, received, total, duration
+            ));
+            
+            // Save metadata
+            if let Err(e) = self.save_metadata() {
+                log_to_file(&format!("Failed to save metadata: {}", e));
+            }
+            
+            json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "result": {
+                    "batch_id": batch_id,
+                    "success_count": received,
+                    "failed_count": total - received,
+                    "duration_ms": duration.as_millis() as u64
+                }
+            })
+        } else {
+            json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "error": {
+                    "code": -32602,
+                    "message": format!("Batch {} not found", batch_id)
+                }
+            })
+        }
+    }
+    
+    fn handle_progress(&mut self, params: Value, id: Value) -> Value {
+        let batch_id = params["batch_id"].as_str().unwrap_or("");
+        let completed = params["completed"].as_u64().unwrap_or(0);
+        let total = params["total"].as_u64().unwrap_or(0);
+        
+        log_to_file(&format!("Progress: {}/{} for batch {}", completed, total, batch_id));
+        
+        json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "result": {"status": "acknowledged"}
+        })
+    }
+    
+    fn commit_batch_bookmarks(&mut self, batch_id: &str) {
+        if let Some(mut batch) = self.batches.remove(batch_id) {
+            self.commit_batch_bookmarks_internal(&mut batch);
+            // Re-insert if not complete
+            if !batch.bookmarks.is_empty() {
+                self.batches.insert(batch_id.to_string(), batch);
+            }
+        }
+    }
+    
+    fn commit_batch_bookmarks_internal(&mut self, batch: &mut BatchState) {
+        if let Some(indexer) = &self.indexer {
+            let count = batch.bookmarks.len();
+            log_to_file(&format!("Committing {} bookmarks from batch", count));
+            
+            // Create writer
+            if let Ok(mut writer) = indexer.create_writer(50_000_000) {
+                for (bookmark, content) in batch.bookmarks.drain(..) {
+                    if let Err(e) = indexer.index_bookmark(&mut writer, &bookmark, content.as_deref()) {
+                        log_to_file(&format!("Failed to index bookmark: {}", e));
+                    } else {
+                        // Update metadata
+                        if let Some(metadata) = &mut self.metadata {
+                            let content_hash = content.as_ref().map(|c| Self::calculate_content_hash(Some(c)));
+                            metadata.bookmarks.insert(
+                                bookmark.id.clone(),
+                                BookmarkMetadata {
+                                    url: bookmark.url,
+                                    date_modified: bookmark.date_modified,
+                                    indexed_at: std::time::SystemTime::now()
+                                        .duration_since(std::time::UNIX_EPOCH)
+                                        .unwrap()
+                                        .as_secs(),
+                                    content_hash,
+                                },
+                            );
+                        }
+                    }
+                }
+                
+                if let Err(e) = writer.commit() {
+                    log_to_file(&format!("Failed to commit: {}", e));
+                } else {
+                    log_to_file(&format!("Successfully committed {} bookmarks", count));
+                }
+            }
+        }
     }
 }
 
