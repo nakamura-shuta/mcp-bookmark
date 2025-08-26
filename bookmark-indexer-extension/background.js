@@ -1,11 +1,342 @@
-// Bookmark Indexer - Background Service Worker
-// Indexes bookmark content to local Tantivy search engine via Native Messaging
+// Bookmark Indexer - Background Service Worker with Parallel Processing
+class ParallelContentFetcher {
+  constructor(options = {}) {
+    this.maxConcurrent = options.maxConcurrent || 5;
+    this.tabTimeout = options.tabTimeout || 30000;
+    this.contentWaitTime = options.contentWaitTime || 5000;
+    this.retryAttempts = options.retryAttempts || 2;
+    
+    this.activeJobs = new Map();
+    this.queue = [];
+    this.isRunning = false;
+    
+    this.metrics = {
+      totalProcessed: 0,
+      successCount: 0,
+      errorCount: 0,
+      startTime: null,
+      endTime: null,
+      errors: []
+    };
+  }
+  
+  async fetchBatch(bookmarks) {
+    console.log(`[Parallel] Starting fetch for ${bookmarks.length} bookmarks`);
+    
+    if (!bookmarks || bookmarks.length === 0) {
+      return this.createEmptyResult();
+    }
+    
+    // For 1-2 bookmarks, use sequential processing
+    if (bookmarks.length <= 2) {
+      console.log(`[Parallel] Using sequential processing for ${bookmarks.length} bookmarks`);
+      return this.fetchSequential(bookmarks);
+    }
+    
+    // Start parallel processing
+    this.metrics.startTime = Date.now();
+    this.isRunning = true;
+    
+    const actualConcurrent = Math.min(this.maxConcurrent, bookmarks.length);
+    this.maxConcurrent = actualConcurrent;
+    console.log(`[Parallel] Using ${actualConcurrent} concurrent tabs`);
+    
+    const promises = bookmarks.map(bookmark => 
+      this.enqueue(bookmark.url, bookmark)
+    );
+    
+    this.processQueue();
+    
+    const results = await Promise.allSettled(promises);
+    
+    this.isRunning = false;
+    this.metrics.endTime = Date.now();
+    
+    return this.collectResults(results, bookmarks);
+  }
+  
+  async fetchSequential(bookmarks) {
+    this.metrics.startTime = Date.now();
+    const successful = [];
+    const failed = [];
+    
+    for (const bookmark of bookmarks) {
+      try {
+        const content = await this.fetchSingleWithRetry(bookmark.url);
+        successful.push({ bookmark, content });
+        this.metrics.successCount++;
+      } catch (error) {
+        failed.push({ bookmark, error: error.message });
+        this.metrics.errorCount++;
+        this.metrics.errors.push({ url: bookmark.url, error: error.message });
+      }
+      this.metrics.totalProcessed++;
+    }
+    
+    this.metrics.endTime = Date.now();
+    
+    return {
+      successful,
+      failed,
+      metrics: this.metrics
+    };
+  }
+  
+  enqueue(url, bookmark) {
+    return new Promise((resolve, reject) => {
+      this.queue.push({ url, bookmark, resolve, reject });
+    });
+  }
+  
+  async processQueue() {
+    while (this.isRunning && (this.queue.length > 0 || this.activeJobs.size > 0)) {
+      // 最大並列数に達していない場合、新しいジョブを開始
+      if (this.activeJobs.size < this.maxConcurrent && this.queue.length > 0) {
+        const job = this.queue.shift();
+        // 並列実行のため、awaitせずに起動
+        this.startJob(job);
+      }
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+  
+  async startJob(job) {
+    const { url, bookmark, resolve, reject } = job;
+    
+    // タブ作成前に仮のIDでジョブを登録（並列数制御のため）
+    const tempId = `temp_${Date.now()}_${Math.random()}`;
+    this.activeJobs.set(tempId, { url, bookmark, resolve, reject });
+    
+    let tabId = null;
+    
+    try {
+      const tab = await chrome.tabs.create({ url: url, active: false });
+      tabId = tab.id;
+      
+      // 仮IDを実際のtabIdに置き換え
+      const jobData = this.activeJobs.get(tempId);
+      this.activeJobs.delete(tempId);
+      
+      const timeoutId = setTimeout(() => {
+        this.handleTimeout(tabId, url);
+      }, this.tabTimeout);
+      
+      this.activeJobs.set(tabId, { 
+        url, 
+        bookmark, 
+        timeoutId, 
+        resolve: jobData.resolve, 
+        reject: jobData.reject 
+      });
+      
+      await this.waitForTabLoad(tabId);
+      const content = await this.extractContent(tabId);
+      
+      this.cleanupJob(tabId);
+      resolve(content);
+      
+    } catch (error) {
+      console.error(`[Parallel] Error processing ${url}:`, error);
+      this.cleanupJob(tabId, error);
+      reject(error);
+    }
+  }
+  
+  waitForTabLoad(tabId) {
+    return new Promise((resolve, reject) => {
+      let attempts = 0;
+      const maxAttempts = 60;
+      
+      const checkStatus = async () => {
+        attempts++;
+        
+        try {
+          const tab = await chrome.tabs.get(tabId);
+          
+          if (tab.status === 'complete') {
+            setTimeout(resolve, this.contentWaitTime);
+          } else if (attempts >= maxAttempts) {
+            reject(new Error('Tab load timeout'));
+          } else {
+            setTimeout(checkStatus, 500);
+          }
+        } catch (error) {
+          reject(error);
+        }
+      };
+      
+      checkStatus();
+    });
+  }
+  
+  async extractContent(tabId) {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        const title = document.title || '';
+        
+        const bodyClone = document.body.cloneNode(true);
+        const removeElements = bodyClone.querySelectorAll(
+          'script, style, noscript, iframe, svg, canvas'
+        );
+        removeElements.forEach(el => el.remove());
+        
+        let content = '';
+        
+        const contentArea = 
+          document.querySelector('[class*="notion-page-content"]') || 
+          document.querySelector('[class*="notion-app-inner"]') ||
+          document.querySelector('main') ||
+          document.querySelector('article') ||
+          document.querySelector('[role="main"]') ||
+          document.querySelector('.content') ||
+          bodyClone;
+        
+        if (contentArea) {
+          content = contentArea.innerText || contentArea.textContent || '';
+        }
+        
+        content = content.replace(/\s+/g, ' ').trim();
+        
+        const metaDesc = document.querySelector('meta[name="description"]');
+        const description = metaDesc ? metaDesc.getAttribute('content') : '';
+        
+        return {
+          title,
+          content,
+          description,
+          url: document.location.href
+        };
+      }
+    });
+    
+    return results[0].result;
+  }
+  
+  handleTimeout(tabId, url) {
+    const job = this.activeJobs.get(tabId);
+    if (job) {
+      console.error(`[Parallel] Timeout for ${url}`);
+      this.cleanupJob(tabId, new Error(`Timeout: ${url}`));
+      job.reject(new Error(`Timeout loading ${url}`));
+    }
+  }
+  
+  cleanupJob(tabId, error = null) {
+    if (!tabId) return;
+    
+    const job = this.activeJobs.get(tabId);
+    if (job) {
+      clearTimeout(job.timeoutId);
+      this.activeJobs.delete(tabId);
+    }
+    
+    chrome.tabs.remove(tabId).catch(() => {});
+  }
+  
+  async fetchSingleWithRetry(url) {
+    let lastError = null;
+    
+    for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
+      try {
+        const tab = await chrome.tabs.create({ url, active: false });
+        await this.waitForTabLoad(tab.id);
+        const content = await this.extractContent(tab.id);
+        await chrome.tabs.remove(tab.id).catch(() => {});
+        return content;
+      } catch (error) {
+        lastError = error;
+        console.log(`[Parallel] Attempt ${attempt}/${this.retryAttempts} failed for ${url}`);
+        
+        if (attempt < this.retryAttempts) {
+          await new Promise(r => setTimeout(r, Math.pow(2, attempt) * 1000));
+        }
+      }
+    }
+    
+    throw lastError;
+  }
+  
+  collectResults(results, bookmarks) {
+    const successful = [];
+    const failed = [];
+    
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        successful.push({
+          bookmark: bookmarks[index],
+          content: result.value
+        });
+        this.metrics.successCount++;
+      } else {
+        failed.push({
+          bookmark: bookmarks[index],
+          error: result.reason.message
+        });
+        this.metrics.errorCount++;
+        this.metrics.errors.push({
+          url: bookmarks[index].url,
+          error: result.reason.message
+        });
+      }
+      this.metrics.totalProcessed++;
+    });
+    
+    return {
+      successful,
+      failed,
+      metrics: this.metrics
+    };
+  }
+  
+  createEmptyResult() {
+    return {
+      successful: [],
+      failed: [],
+      metrics: {
+        totalProcessed: 0,
+        successCount: 0,
+        errorCount: 0,
+        startTime: Date.now(),
+        endTime: Date.now(),
+        errors: []
+      }
+    };
+  }
+  
+  abort() {
+    console.log('[Parallel] Aborting all jobs');
+    this.isRunning = false;
+    
+    this.activeJobs.forEach((job, tabId) => {
+      this.cleanupJob(tabId, new Error('Aborted'));
+      job.reject(new Error('Processing aborted'));
+    });
+    
+    this.queue.forEach(job => {
+      job.reject(new Error('Processing aborted'));
+    });
+    this.queue = [];
+  }
+  
+  getStatus() {
+    return {
+      activeJobs: this.activeJobs.size,
+      queueLength: this.queue.length,
+      isRunning: this.isRunning,
+      metrics: this.metrics
+    };
+  }
+}
 
-// Send message to native host (mcp-bookmark-native)
+// ============================================
+// Single Message Native Communication
+// ============================================
+
 function sendToNative(method, params = {}) {
   return new Promise((resolve, reject) => {
     const port = chrome.runtime.connectNative('com.mcp_bookmark');
-    const timeoutId = setTimeout(() => reject(new Error('Timeout')), 30000);
+    const timeoutId = setTimeout(() => reject(new Error('Timeout')), 60000);
     
     port.onDisconnect.addListener(() => {
       clearTimeout(timeoutId);
@@ -29,229 +360,103 @@ function sendToNative(method, params = {}) {
   });
 }
 
-// Open page in actual tab and extract content
-async function fetchContent(url) {
-  try {
-    // Create a new tab with the URL
-    const tab = await chrome.tabs.create({ 
-      url: url, 
-      active: false  // Don't switch to the tab
-    });
-    
-    // Wait for the page to load
-    await new Promise(resolve => {
-      const listener = (tabId, changeInfo) => {
-        if (tabId === tab.id && changeInfo.status === 'complete') {
-          chrome.tabs.onUpdated.removeListener(listener);
-          // Add extra delay for SPAs like Notion to fully render
-          setTimeout(resolve, 5000);
-        }
-      };
-      chrome.tabs.onUpdated.addListener(listener);
-      
-      // Timeout after 30 seconds
-      setTimeout(() => {
-        chrome.tabs.onUpdated.removeListener(listener);
-        resolve();
-      }, 30000);
-    });
-    
-    // Extract content from the page
-    const results = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: () => {
-        // This runs in the page context
-        const title = document.title || '';
-        
-        // Clone the body and remove script/style elements
-        const bodyClone = document.body.cloneNode(true);
-        const scripts = bodyClone.querySelectorAll('script, style, noscript, iframe');
-        scripts.forEach(el => el.remove());
-        
-        // Get text content - try different methods
-        let content = '';
-        
-        // For Notion pages, try to get the main content area
-        const notionContent = document.querySelector('[class*="notion-page-content"]') || 
-                            document.querySelector('[class*="notion-app-inner"]') ||
-                            document.querySelector('main') ||
-                            bodyClone;
-        
-        if (notionContent) {
-          content = notionContent.innerText || notionContent.textContent || '';
-        } else {
-          content = bodyClone.innerText || bodyClone.textContent || '';
-        }
-        
-        // Clean up whitespace - NO LIMIT
-        content = content
-          .replace(/\s+/g, ' ')
-          .trim();  // No substring limit - get ALL content
-        
-        // Also try to get meta description as fallback
-        const metaDesc = document.querySelector('meta[name="description"]');
-        const description = metaDesc ? metaDesc.getAttribute('content') : '';
-        
-        console.log(`Extracted from ${document.location.href}:`);
-        console.log(`  Title: ${title}`);
-        console.log(`  Content length: ${content.length} chars`);
-        console.log(`  Has Notion content: ${!!document.querySelector('[class*="notion"]')}`);
-        
-        return { title, content, description };
-      }
-    });
-    
-    // Close the tab
-    await chrome.tabs.remove(tab.id);
-    
-    // Return the extracted content
-    if (results && results[0] && results[0].result) {
-      const { title, content, description } = results[0].result;
-      // Combine description with content if available
-      const fullContent = description ? `${description}\n\n${content}` : content;
-      console.log(`Fetched content from ${url}:`);
-      console.log(`  Title: ${title}`);
-      console.log(`  Content length: ${fullContent.length} chars`);
-      console.log(`  First 200 chars: ${fullContent.substring(0, 200)}...`);
-      return { title, content: fullContent };
-    }
-    
-    console.log(`No content extracted from ${url}`);
-    return null;
-  } catch (error) {
-    console.error(`Failed to fetch ${url}:`, error);
-    return null;
-  }
-}
+// ============================================
+// Simplified Parallel Indexing - Single Message
+// ============================================
 
-// Index a single bookmark with specific index
-async function indexBookmarkWithIndex(bookmark, indexName, skipIfUnchanged = false) {
-  const content = await fetchContent(bookmark.url);
-  
-  const payload = {
-    id: bookmark.id,
-    url: bookmark.url,
-    title: bookmark.title || content?.title || '',
-    content: content?.content || '',
-    folder_path: bookmark.folder_path || [],
-    date_added: bookmark.dateAdded,
-    date_modified: bookmark.dateModified || bookmark.dateAdded,
-    index_name: indexName,  // Include index name with each bookmark
-    skip_if_unchanged: skipIfUnchanged  // Skip if content hasn't changed
-  };
-  
-  console.log(`Sending to native host for ${bookmark.url}:`);
-  console.log(`  Index: ${indexName}`);
-  console.log(`  Content length: ${payload.content.length} chars`);
-  console.log(`  Skip if unchanged: ${skipIfUnchanged}`);
-  
-  return sendToNative('index_bookmark', payload);
-}
-
-// Check for updates before indexing
-async function checkForUpdates(bookmarks, indexName) {
-  const bookmarkMetadata = bookmarks.map(b => ({
-    id: b.id,
-    date_modified: b.dateModified || b.dateAdded
-  }));
-  
-  try {
-    const result = await sendToNative('check_for_updates', {
-      bookmarks: bookmarkMetadata,
-      index_name: indexName
-    });
-    
-    console.log(`Update check result:`, result);
-    return result;
-  } catch (error) {
-    console.error('Failed to check for updates:', error);
-    // If check fails, assume all need indexing
-    return {
-      new_bookmarks: bookmarks.map(b => b.id),
-      updated_bookmarks: []
-    };
-  }
-}
-
-// Index bookmarks from a folder with incremental updates
-async function indexFolder(folderId, folderName, indexName, incremental = true) {
+async function indexFolderParallel(folderId, folderName, indexName) {
   const tree = await chrome.bookmarks.getSubTree(folderId);
   const bookmarks = flattenTree(tree[0]);
   
-  // Use the folder name from popup directly
   const finalFolderName = folderName || tree[0].title || 'Bookmarks';
   const finalIndexName = indexName || `Extension_${finalFolderName}`;
   
-  console.log(`Indexing folder: "${finalFolderName}" (ID: ${folderId})`);
-  console.log(`Index name: "${finalIndexName}"`);
-  console.log(`Incremental mode: ${incremental}`);
+  console.log(`[Simple] Indexing folder: "${finalFolderName}" (ID: ${folderId})`);
+  console.log(`[Simple] Index name: "${finalIndexName}"`);
+  console.log(`[Simple] Total bookmarks: ${bookmarks.length}`);
   
-  let indexed = 0;
-  let skipped = 0;
-  let failed = 0;
-  const total = bookmarks.length;
-  
-  // Check for updates if in incremental mode
-  let toIndex = bookmarks;
-  if (incremental) {
-    const updateInfo = await checkForUpdates(bookmarks, finalIndexName);
-    const needsIndexing = new Set([
-      ...updateInfo.new_bookmarks,
-      ...updateInfo.updated_bookmarks
-    ]);
-    
-    toIndex = bookmarks.filter(b => needsIndexing.has(b.id));
-    skipped = bookmarks.length - toIndex.length;
-    
-    console.log(`Incremental update: ${toIndex.length} of ${total} bookmarks need indexing`);
-    console.log(`  New: ${updateInfo.new_bookmarks.length}`);
-    console.log(`  Updated: ${updateInfo.updated_bookmarks.length}`);
-    console.log(`  Skipped: ${skipped}`);
-  }
-  
-  // Index bookmarks that need updating
-  for (const bookmark of toIndex) {
-    try {
-      // Pass index name with each bookmark, enable skip check
-      const result = await indexBookmarkWithIndex(bookmark, finalIndexName, incremental);
-      
-      if (result?.status === 'skipped') {
-        skipped++;
-        console.log(`[${indexed + skipped}/${total}] Skipped (unchanged): ${bookmark.url}`);
-      } else {
-        indexed++;
-        console.log(`[${indexed + skipped}/${total}] Indexed: ${bookmark.url}`);
-      }
-      
-      // Update progress
-      chrome.runtime.sendMessage({
-        type: 'progress',
-        indexed,
-        failed,
-        skipped,
-        total
-      }).catch(() => {});
-      
-      // Delay between requests to avoid overwhelming the browser
-      await new Promise(resolve => setTimeout(resolve, 500));
-    } catch (error) {
-      failed++;
-      console.error(`Failed: ${bookmark.url}`, error);
-    }
-  }
-  
-  // Sync metadata after completion
   try {
-    await sendToNative('sync_bookmarks', { index_name: finalIndexName });
-    console.log('Metadata synced successfully');
+    // Step 1: Fetch all content in parallel
+    const fetcher = new ParallelContentFetcher({
+      maxConcurrent: bookmarks.length <= 2 ? 1 : 5,
+      tabTimeout: 30000,
+      contentWaitTime: 5000
+    });
+    
+    const results = await fetcher.fetchBatch(bookmarks);
+    
+    console.log(`[Simple] Fetch completed:`);
+    console.log(`  Successful: ${results.successful.length}`);
+    console.log(`  Failed: ${results.failed.length}`);
+    console.log(`  Duration: ${results.metrics.endTime - results.metrics.startTime}ms`);
+    
+    // Step 2: Prepare all bookmark data with content
+    const bookmarksWithContent = [];
+    
+    for (const { bookmark, content } of results.successful) {
+      bookmarksWithContent.push({
+        id: bookmark.id,
+        url: bookmark.url,
+        title: bookmark.title || content?.title || '',
+        folder_path: bookmark.folder_path || [],
+        date_added: bookmark.dateAdded,
+        date_modified: bookmark.dateModified || bookmark.dateAdded,
+        content: content?.description ? 
+          `${content.description}\n\n${content.content}` : 
+          content?.content || ''
+      });
+    }
+    
+    // Add failed items with empty content
+    for (const { bookmark } of results.failed) {
+      bookmarksWithContent.push({
+        id: bookmark.id,
+        url: bookmark.url,
+        title: bookmark.title || '',
+        folder_path: bookmark.folder_path || [],
+        date_added: bookmark.dateAdded,
+        date_modified: bookmark.dateModified || bookmark.dateAdded,
+        content: ''
+      });
+    }
+    
+    // Step 3: Send ALL bookmarks in ONE message
+    console.log(`[Simple] Sending ${bookmarksWithContent.length} bookmarks in single message...`);
+    
+    const indexResult = await sendToNative('index_bookmarks_batch', {
+      index_name: finalIndexName,
+      bookmarks: bookmarksWithContent
+    });
+    
+    console.log(`[Simple] Indexing completed:`, indexResult);
+    
+    // Update progress
+    chrome.runtime.sendMessage({
+      type: 'progress',
+      indexed: results.successful.length,
+      failed: results.failed.length,
+      skipped: 0,
+      total: bookmarks.length
+    }).catch(() => {});
+    
+    return {
+      indexed: results.successful.length,
+      failed: results.failed.length,
+      skipped: 0,
+      total: bookmarks.length,
+      duration: results.metrics.endTime - results.metrics.startTime
+    };
+    
   } catch (error) {
-    console.error('Failed to sync metadata:', error);
+    console.error(`[Simple] Indexing failed:`, error);
+    throw error;
   }
-  
-  return { indexed, failed, skipped, total };
 }
 
-// Flatten bookmark tree into array
+// ============================================
+// Helper Functions
+// ============================================
+
 function flattenTree(node, path = []) {
   const results = [];
   
@@ -276,11 +481,15 @@ function flattenTree(node, path = []) {
   return results;
 }
 
-// Message handler
+// ============================================
+// Message Handler
+// ============================================
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   switch (request.type) {
     case 'index_folder':
-      indexFolder(request.folderId || '0', request.folderName, request.indexName)
+      // Use simplified parallel indexing
+      indexFolderParallel(request.folderId || '0', request.folderName, request.indexName)
         .then(result => sendResponse({ success: true, result }))
         .catch(error => sendResponse({ success: false, error: error.message }));
       return true;
@@ -293,4 +502,4 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-console.log('Bookmark Indexer loaded');
+console.log('Bookmark Indexer with Simplified Parallel Processing loaded');

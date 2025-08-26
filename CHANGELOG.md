@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+## [v0.4.3] - 2025-08-26
+
+### Added
+
+- Parallel indexing for Chrome extension
+  - 5-10x faster indexing with concurrent processing
+  - Batch processing with configurable buffer size
+  - Progress tracking for large bookmark collections
+  - Native messaging protocol optimizations
+
+### Changed
+
+- Improved memory management during batch indexing
+- Optimized buffer commit strategy for better performance
+
+### Fixed
+
+- Native messaging batch state management
+- Duplicate index detection in parallel processing
+
 ## [v0.4.2] - 2025-08-26
 
 ### Added
