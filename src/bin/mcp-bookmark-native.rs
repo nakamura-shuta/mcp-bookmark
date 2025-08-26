@@ -61,7 +61,7 @@ impl NativeMessagingHost {
             metadata: None,
         }
     }
-    
+
     fn metadata_path(&self) -> PathBuf {
         dirs::data_dir()
             .unwrap_or_else(|| PathBuf::from("."))
@@ -69,14 +69,19 @@ impl NativeMessagingHost {
             .join(&self.index_name)
             .join("index_metadata.json")
     }
-    
+
     fn load_metadata(&mut self) -> Result<()> {
         let path = self.metadata_path();
         if path.exists() {
             let content = std::fs::read_to_string(&path)?;
             self.metadata = Some(serde_json::from_str(&content)?);
-            log_to_file(&format!("Loaded metadata with {} bookmarks", 
-                self.metadata.as_ref().map(|m| m.bookmarks.len()).unwrap_or(0)));
+            log_to_file(&format!(
+                "Loaded metadata with {} bookmarks",
+                self.metadata
+                    .as_ref()
+                    .map(|m| m.bookmarks.len())
+                    .unwrap_or(0)
+            ));
         } else {
             self.metadata = Some(IndexMetadata {
                 bookmarks: HashMap::new(),
@@ -86,22 +91,25 @@ impl NativeMessagingHost {
         }
         Ok(())
     }
-    
+
     fn save_metadata(&self) -> Result<()> {
         if let Some(metadata) = &self.metadata {
             let path = self.metadata_path();
             std::fs::create_dir_all(path.parent().unwrap())?;
             let content = serde_json::to_string_pretty(metadata)?;
             std::fs::write(&path, content)?;
-            log_to_file(&format!("Saved metadata with {} bookmarks", metadata.bookmarks.len()));
+            log_to_file(&format!(
+                "Saved metadata with {} bookmarks",
+                metadata.bookmarks.len()
+            ));
         }
         Ok(())
     }
-    
+
     fn calculate_content_hash(content: Option<&str>) -> String {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let mut hasher = DefaultHasher::new();
         content.unwrap_or("").hash(&mut hasher);
         hasher.finish().to_string()
@@ -131,10 +139,10 @@ impl NativeMessagingHost {
         Self::register_lindera_tokenizer(&index)?;
 
         self.indexer = Some(BookmarkIndexer::new(index, schema));
-        
+
         // Load metadata after initializing indexer
         self.load_metadata()?;
-        
+
         log_to_file(&format!(
             "Tantivy index initialized with Lindera tokenizer: {}",
             self.index_name
@@ -211,9 +219,9 @@ impl NativeMessagingHost {
             "get_stats" => self.get_index_stats(id),
 
             "list_indexes" => self.list_indexes(id),
-            
+
             "sync_bookmarks" => self.sync_bookmarks(message["params"].clone(), id),
-            
+
             "check_for_updates" => self.check_for_updates(message["params"].clone(), id),
 
             // Legacy MCP methods for compatibility
@@ -279,14 +287,15 @@ impl NativeMessagingHost {
 
         let content = params["content"].as_str();
         let skip_if_unchanged = params["skip_if_unchanged"].as_bool().unwrap_or(false);
-        
+
         // Check if we should skip this bookmark
         if skip_if_unchanged {
             if let Some(metadata) = &self.metadata {
                 if let Some(existing) = metadata.bookmarks.get(&bookmark.id) {
                     let content_hash = Self::calculate_content_hash(content);
-                    if existing.date_modified == bookmark.date_modified 
-                        && existing.content_hash == Some(content_hash) {
+                    if existing.date_modified == bookmark.date_modified
+                        && existing.content_hash == Some(content_hash)
+                    {
                         log_to_file(&format!("Skipping unchanged bookmark: {}", bookmark.url));
                         return json!({
                             "jsonrpc": "2.0",
@@ -316,7 +325,7 @@ impl NativeMessagingHost {
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap()
                         .as_secs();
-                    
+
                     metadata.bookmarks.insert(
                         bookmark.id.clone(),
                         BookmarkMetadata {
@@ -324,15 +333,15 @@ impl NativeMessagingHost {
                             date_modified: bookmark.date_modified.clone(),
                             indexed_at: now,
                             content_hash: Some(Self::calculate_content_hash(content)),
-                        }
+                        },
                     );
-                    
-                    // Save metadata periodically (every 10 bookmarks)
-                    if metadata.bookmarks.len() % 10 == 0 {
+
+                    // Save metadata periodically (every 10 bookmarks) or always for small collections
+                    if metadata.bookmarks.len() % 10 == 0 || metadata.bookmarks.len() <= 5 {
                         let _ = self.save_metadata();
                     }
                 }
-                
+
                 log_to_file(&format!("Successfully indexed bookmark: {}", bookmark.url));
                 json!({
                     "jsonrpc": "2.0",
@@ -459,7 +468,7 @@ impl NativeMessagingHost {
         }
         Ok(size)
     }
-    
+
     fn check_for_updates(&mut self, params: Value, id: Value) -> Value {
         // Initialize if needed
         if self.indexer.is_none() {
@@ -474,7 +483,7 @@ impl NativeMessagingHost {
                 });
             }
         }
-        
+
         let bookmarks = params["bookmarks"].as_array();
         if bookmarks.is_none() {
             return json!({
@@ -486,15 +495,15 @@ impl NativeMessagingHost {
                 }
             });
         }
-        
+
         let mut updates_needed = Vec::new();
         let mut new_bookmarks = Vec::new();
-        
+
         if let Some(metadata) = &self.metadata {
             for bookmark in bookmarks.unwrap() {
                 let id_str = bookmark["id"].as_str().unwrap_or("");
                 let date_modified = bookmark["date_modified"].as_str();
-                
+
                 if let Some(existing) = metadata.bookmarks.get(id_str) {
                     // Check if bookmark has been modified
                     if existing.date_modified != date_modified.map(String::from) {
@@ -513,13 +522,13 @@ impl NativeMessagingHost {
                 }
             }
         }
-        
+
         log_to_file(&format!(
             "Check for updates: {} new, {} updated",
             new_bookmarks.len(),
             updates_needed.len()
         ));
-        
+
         json!({
             "jsonrpc": "2.0",
             "id": id,
@@ -530,22 +539,22 @@ impl NativeMessagingHost {
             }
         })
     }
-    
+
     fn sync_bookmarks(&mut self, _params: Value, id: Value) -> Value {
         // Save metadata after sync
         if let Err(e) = self.save_metadata() {
             log_to_file(&format!("Failed to save metadata: {}", e));
         }
-        
+
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        
+
         if let Some(metadata) = &mut self.metadata {
             metadata.last_full_sync = now;
         }
-        
+
         json!({
             "jsonrpc": "2.0",
             "id": id,

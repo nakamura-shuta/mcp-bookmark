@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+## [v0.4.2] - 2025-08-26
+
+### Added
+
+- Incremental index updates for Chrome extension
+  - Skip unchanged bookmarks during re-indexing
+  - Metadata tracking with content hashing
+  - check_for_updates and sync_bookmarks native messaging methods
+  - Reduced re-indexing time from ~50 seconds to ~1 second for unchanged bookmarks
+- Extension icon support with multiple sizes (16x16, 32x32, 64x64, 128x128)
+
+### Changed
+
+- Chrome extension now uses incremental mode by default
+- Improved indexing performance for large bookmark collections
+
+### Fixed
+
+- Metadata saving for small bookmark collections (5 or fewer bookmarks)
+
 ## [v0.4.1] - 2025-08-25
 
 ### Added
