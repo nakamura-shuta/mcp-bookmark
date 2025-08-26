@@ -125,7 +125,7 @@ async function fetchContent(url) {
 }
 
 // Index a single bookmark with specific index
-async function indexBookmarkWithIndex(bookmark, indexName) {
+async function indexBookmarkWithIndex(bookmark, indexName, skipIfUnchanged = false) {
   const content = await fetchContent(bookmark.url);
   
   const payload = {
@@ -136,18 +136,45 @@ async function indexBookmarkWithIndex(bookmark, indexName) {
     folder_path: bookmark.folder_path || [],
     date_added: bookmark.dateAdded,
     date_modified: bookmark.dateModified || bookmark.dateAdded,
-    index_name: indexName  // Include index name with each bookmark
+    index_name: indexName,  // Include index name with each bookmark
+    skip_if_unchanged: skipIfUnchanged  // Skip if content hasn't changed
   };
   
   console.log(`Sending to native host for ${bookmark.url}:`);
   console.log(`  Index: ${indexName}`);
   console.log(`  Content length: ${payload.content.length} chars`);
+  console.log(`  Skip if unchanged: ${skipIfUnchanged}`);
   
   return sendToNative('index_bookmark', payload);
 }
 
-// Index bookmarks from a folder
-async function indexFolder(folderId, folderName, indexName) {
+// Check for updates before indexing
+async function checkForUpdates(bookmarks, indexName) {
+  const bookmarkMetadata = bookmarks.map(b => ({
+    id: b.id,
+    date_modified: b.dateModified || b.dateAdded
+  }));
+  
+  try {
+    const result = await sendToNative('check_for_updates', {
+      bookmarks: bookmarkMetadata,
+      index_name: indexName
+    });
+    
+    console.log(`Update check result:`, result);
+    return result;
+  } catch (error) {
+    console.error('Failed to check for updates:', error);
+    // If check fails, assume all need indexing
+    return {
+      new_bookmarks: bookmarks.map(b => b.id),
+      updated_bookmarks: []
+    };
+  }
+}
+
+// Index bookmarks from a folder with incremental updates
+async function indexFolder(folderId, folderName, indexName, incremental = true) {
   const tree = await chrome.bookmarks.getSubTree(folderId);
   const bookmarks = flattenTree(tree[0]);
   
@@ -157,23 +184,51 @@ async function indexFolder(folderId, folderName, indexName) {
   
   console.log(`Indexing folder: "${finalFolderName}" (ID: ${folderId})`);
   console.log(`Index name: "${finalIndexName}"`);
+  console.log(`Incremental mode: ${incremental}`);
   
   let indexed = 0;
+  let skipped = 0;
   let failed = 0;
   const total = bookmarks.length;
   
-  for (const bookmark of bookmarks) {
+  // Check for updates if in incremental mode
+  let toIndex = bookmarks;
+  if (incremental) {
+    const updateInfo = await checkForUpdates(bookmarks, finalIndexName);
+    const needsIndexing = new Set([
+      ...updateInfo.new_bookmarks,
+      ...updateInfo.updated_bookmarks
+    ]);
+    
+    toIndex = bookmarks.filter(b => needsIndexing.has(b.id));
+    skipped = bookmarks.length - toIndex.length;
+    
+    console.log(`Incremental update: ${toIndex.length} of ${total} bookmarks need indexing`);
+    console.log(`  New: ${updateInfo.new_bookmarks.length}`);
+    console.log(`  Updated: ${updateInfo.updated_bookmarks.length}`);
+    console.log(`  Skipped: ${skipped}`);
+  }
+  
+  // Index bookmarks that need updating
+  for (const bookmark of toIndex) {
     try {
-      // Pass index name with each bookmark
-      await indexBookmarkWithIndex(bookmark, finalIndexName);
-      indexed++;
-      console.log(`[${indexed}/${total}] Indexed: ${bookmark.url}`);
+      // Pass index name with each bookmark, enable skip check
+      const result = await indexBookmarkWithIndex(bookmark, finalIndexName, incremental);
+      
+      if (result?.status === 'skipped') {
+        skipped++;
+        console.log(`[${indexed + skipped}/${total}] Skipped (unchanged): ${bookmark.url}`);
+      } else {
+        indexed++;
+        console.log(`[${indexed + skipped}/${total}] Indexed: ${bookmark.url}`);
+      }
       
       // Update progress
       chrome.runtime.sendMessage({
         type: 'progress',
         indexed,
         failed,
+        skipped,
         total
       }).catch(() => {});
       
@@ -185,7 +240,15 @@ async function indexFolder(folderId, folderName, indexName) {
     }
   }
   
-  return { indexed, failed, total };
+  // Sync metadata after completion
+  try {
+    await sendToNative('sync_bookmarks', { index_name: finalIndexName });
+    console.log('Metadata synced successfully');
+  } catch (error) {
+    console.error('Failed to sync metadata:', error);
+  }
+  
+  return { indexed, failed, skipped, total };
 }
 
 // Flatten bookmark tree into array

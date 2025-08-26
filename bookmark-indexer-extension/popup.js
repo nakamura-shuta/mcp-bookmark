@@ -12,7 +12,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Listen for progress updates
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === 'progress') {
-      updateProgress(msg.indexed, msg.total);
+      updateProgress(msg.indexed, msg.total, msg.skipped);
     }
   });
 });
@@ -132,12 +132,16 @@ function setupListeners() {
       hideProgress();
       
       if (response?.success) {
-        const { indexed, failed } = response.result;
-        if (failed > 0) {
-          showStatus(`Indexed ${indexed} bookmarks (${failed} failed)`, 'info');
+        const { indexed, failed, skipped } = response.result;
+        let statusText;
+        if (skipped && skipped > 0) {
+          statusText = `Indexed ${indexed} bookmarks (${skipped} skipped, ${failed} failed)`;
+        } else if (failed > 0) {
+          statusText = `Indexed ${indexed} bookmarks (${failed} failed)`;
         } else {
-          showStatus(`Successfully indexed ${indexed} bookmarks!`, 'success');
+          statusText = `Successfully indexed ${indexed} bookmarks!`;
         }
+        showStatus(statusText, failed > 0 ? 'info' : 'success');
         // Reload index list after successful indexing
         loadIndexList();
       } else {
@@ -161,10 +165,16 @@ function hideProgress() {
   }, 2000);
 }
 
-function updateProgress(current, total) {
-  const percentage = total > 0 ? (current / total * 100) : 0;
+function updateProgress(current, total, skipped = 0) {
+  const processed = current + (skipped || 0);
+  const percentage = total > 0 ? (processed / total * 100) : 0;
   document.getElementById('progress-fill').style.width = `${percentage}%`;
-  document.getElementById('progress-text').textContent = `${current} / ${total}`;
+  
+  let text = `${current} / ${total}`;
+  if (skipped > 0) {
+    text += ` (${skipped} skipped)`;
+  }
+  document.getElementById('progress-text').textContent = text;
 }
 
 // Status message
