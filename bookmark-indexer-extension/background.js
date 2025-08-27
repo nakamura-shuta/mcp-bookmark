@@ -5,6 +5,7 @@ class ParallelContentFetcher {
     this.tabTimeout = options.tabTimeout || 30000;
     this.contentWaitTime = options.contentWaitTime || 5000;
     this.retryAttempts = options.retryAttempts || 2;
+    this.progressCallback = options.progressCallback || null;
     
     this.activeJobs = new Map();
     this.queue = [];
@@ -16,8 +17,15 @@ class ParallelContentFetcher {
       errorCount: 0,
       startTime: null,
       endTime: null,
-      errors: []
+      errors: [],
+      total: 0
     };
+  }
+  
+  sendProgressUpdate() {
+    if (this.progressCallback) {
+      this.progressCallback(this.metrics.successCount, this.metrics.total, this.metrics.errorCount);
+    }
   }
   
   async fetchBatch(bookmarks) {
@@ -26,6 +34,9 @@ class ParallelContentFetcher {
     if (!bookmarks || bookmarks.length === 0) {
       return this.createEmptyResult();
     }
+    
+    // Set total for progress tracking
+    this.metrics.total = bookmarks.length;
     
     // For 1-2 bookmarks, use sequential processing
     if (bookmarks.length <= 2) {
@@ -71,6 +82,7 @@ class ParallelContentFetcher {
         this.metrics.errors.push({ url: bookmark.url, error: error.message });
       }
       this.metrics.totalProcessed++;
+      this.sendProgressUpdate();
     }
     
     this.metrics.endTime = Date.now();
@@ -133,11 +145,17 @@ class ParallelContentFetcher {
       const content = await this.extractContent(tabId);
       
       this.cleanupJob(tabId);
+      this.metrics.successCount++;
+      this.metrics.totalProcessed++;
+      this.sendProgressUpdate();
       resolve(content);
       
     } catch (error) {
       console.error(`[Parallel] Error processing ${url}:`, error);
-      this.cleanupJob(tabId, error);
+      this.cleanupJob(tabId);
+      this.metrics.errorCount++;
+      this.metrics.totalProcessed++;
+      this.sendProgressUpdate();
       reject(error);
     }
   }
@@ -217,12 +235,12 @@ class ParallelContentFetcher {
     const job = this.activeJobs.get(tabId);
     if (job) {
       console.error(`[Parallel] Timeout for ${url}`);
-      this.cleanupJob(tabId, new Error(`Timeout: ${url}`));
+      this.cleanupJob(tabId);
       job.reject(new Error(`Timeout loading ${url}`));
     }
   }
   
-  cleanupJob(tabId, error = null) {
+  cleanupJob(tabId) {
     if (!tabId) return;
     
     const job = this.activeJobs.get(tabId);
@@ -267,19 +285,12 @@ class ParallelContentFetcher {
           bookmark: bookmarks[index],
           content: result.value
         });
-        this.metrics.successCount++;
       } else {
         failed.push({
           bookmark: bookmarks[index],
           error: result.reason.message
         });
-        this.metrics.errorCount++;
-        this.metrics.errors.push({
-          url: bookmarks[index].url,
-          error: result.reason.message
-        });
       }
-      this.metrics.totalProcessed++;
     });
     
     return {
@@ -309,7 +320,7 @@ class ParallelContentFetcher {
     this.isRunning = false;
     
     this.activeJobs.forEach((job, tabId) => {
-      this.cleanupJob(tabId, new Error('Aborted'));
+      this.cleanupJob(tabId);
       job.reject(new Error('Processing aborted'));
     });
     
@@ -329,10 +340,7 @@ class ParallelContentFetcher {
   }
 }
 
-// ============================================
-// Single Message Native Communication
-// ============================================
-
+// Native Communication
 function sendToNative(method, params = {}) {
   return new Promise((resolve, reject) => {
     const port = chrome.runtime.connectNative('com.mcp_bookmark');
@@ -360,10 +368,7 @@ function sendToNative(method, params = {}) {
   });
 }
 
-// ============================================
-// Simplified Parallel Indexing - Single Message
-// ============================================
-
+// Main indexing function
 async function indexFolderParallel(folderId, folderName, indexName) {
   const tree = await chrome.bookmarks.getSubTree(folderId);
   const bookmarks = flattenTree(tree[0]);
@@ -380,7 +385,17 @@ async function indexFolderParallel(folderId, folderName, indexName) {
     const fetcher = new ParallelContentFetcher({
       maxConcurrent: bookmarks.length <= 2 ? 1 : 5,
       tabTimeout: 30000,
-      contentWaitTime: 5000
+      contentWaitTime: 5000,
+      progressCallback: (indexed, total, failed) => {
+        // Send progress update to popup
+        chrome.runtime.sendMessage({
+          type: 'progress',
+          indexed: indexed,
+          total: total,
+          failed: failed,
+          skipped: 0
+        }).catch(() => {});
+      }
     });
     
     const results = await fetcher.fetchBatch(bookmarks);
@@ -430,7 +445,7 @@ async function indexFolderParallel(folderId, folderName, indexName) {
     
     console.log(`[Simple] Indexing completed:`, indexResult);
     
-    // Update progress
+    // Send final progress update to ensure UI shows 100%
     chrome.runtime.sendMessage({
       type: 'progress',
       indexed: results.successful.length,
@@ -453,10 +468,7 @@ async function indexFolderParallel(folderId, folderName, indexName) {
   }
 }
 
-// ============================================
-// Helper Functions
-// ============================================
-
+// Helper function to flatten bookmark tree
 function flattenTree(node, path = []) {
   const results = [];
   
@@ -481,11 +493,8 @@ function flattenTree(node, path = []) {
   return results;
 }
 
-// ============================================
-// Message Handler
-// ============================================
-
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+// Message handler
+chrome.runtime.onMessage.addListener((request, _, sendResponse) => {
   switch (request.type) {
     case 'index_folder':
       // Use simplified parallel indexing

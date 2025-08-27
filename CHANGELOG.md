@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Chrome extension parallel indexing progress tracking
+  - Added proper progress callbacks to track indexing status
+  - Fixed metrics counting for success and error cases
+  - Improved progress reporting to popup UI
+
 ## [v0.4.3] - 2025-08-26
 
 ### Added
