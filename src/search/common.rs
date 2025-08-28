@@ -1,6 +1,6 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize};
 use tantivy::{TantivyDocument, schema::Value};
 
 use super::schema::BookmarkSchema;
@@ -23,16 +23,6 @@ pub const DEFAULT_INDEX_NAME: &str = "default_index";
 /// Index metadata file name
 pub const INDEX_METADATA_FILE: &str = "meta.json";
 
-/// MCP-optimized search configuration constants
-pub mod mcp {
-    /// Maximum snippets per result for MCP
-    pub const MAX_SNIPPETS_PER_RESULT: usize = 2;
-    /// Maximum snippet length for MCP
-    pub const MAX_SNIPPET_LENGTH: usize = 300;
-    /// Maximum total results
-    pub const MAX_RESULTS: usize = 10;
-}
-
 /// Unified indexing status for all managers
 #[derive(Debug)]
 pub struct IndexingStatus {
@@ -48,9 +38,6 @@ pub struct IndexingStatus {
     /// Completion flag
     pub is_complete: AtomicBool,
 
-    /// Start time
-    pub started_at: std::time::Instant,
-
     /// Type of indexing
     pub index_type: IndexingType,
 
@@ -61,39 +48,15 @@ pub struct IndexingStatus {
 /// Type of indexing operation
 #[derive(Debug, Clone, PartialEq)]
 pub enum IndexingType {
-    /// Full indexing from bookmarks
-    FullIndex,
-    /// Using pre-built index from Chrome extension
-    PreBuilt,
     /// Read-only access to existing index
     ReadOnly,
 }
 
 impl IndexingStatus {
-    /// Create new status for full indexing
-    pub fn new(total: usize) -> Self {
-        Self {
-            total: AtomicUsize::new(total),
-            completed: AtomicUsize::new(0),
-            errors: AtomicUsize::new(0),
-            is_complete: AtomicBool::new(false),
-            started_at: std::time::Instant::now(),
-            index_type: IndexingType::FullIndex,
-            doc_count: 0,
-        }
-    }
-
-    /// Create status for pre-built index
-    pub fn for_prebuilt(doc_count: usize) -> Self {
-        Self {
-            total: AtomicUsize::new(0),
-            completed: AtomicUsize::new(0),
-            errors: AtomicUsize::new(0),
-            is_complete: AtomicBool::new(true),
-            started_at: std::time::Instant::now(),
-            index_type: IndexingType::PreBuilt,
-            doc_count,
-        }
+    /// Create new status (for compatibility)
+    pub fn new(_total: usize) -> Self {
+        // Always returns read-only status as we only support pre-built indexes
+        Self::for_readonly(0)
     }
 
     /// Create status for read-only index
@@ -103,7 +66,6 @@ impl IndexingStatus {
             completed: AtomicUsize::new(0),
             errors: AtomicUsize::new(0),
             is_complete: AtomicBool::new(true),
-            started_at: std::time::Instant::now(),
             index_type: IndexingType::ReadOnly,
             doc_count,
         }
@@ -111,57 +73,12 @@ impl IndexingStatus {
 
     /// Get progress percentage (0.0 - 100.0)
     pub fn progress(&self) -> f32 {
-        match self.index_type {
-            IndexingType::PreBuilt | IndexingType::ReadOnly => 100.0,
-            IndexingType::FullIndex => {
-                let total = self.total.load(Ordering::Relaxed);
-                if total == 0 {
-                    0.0
-                } else {
-                    let completed = self.completed.load(Ordering::Relaxed);
-                    (completed as f32 / total as f32) * 100.0
-                }
-            }
-        }
-    }
-
-    /// Mark as complete
-    pub fn mark_complete(&self) {
-        self.is_complete.store(true, Ordering::Relaxed);
-    }
-
-    /// Increment completed count
-    pub fn increment_completed(&self) {
-        self.completed.fetch_add(1, Ordering::Relaxed);
-    }
-
-    /// Increment error count
-    pub fn increment_errors(&self) {
-        self.errors.fetch_add(1, Ordering::Relaxed);
+        100.0 // Always 100% for read-only index
     }
 
     /// Get status summary
     pub fn summary(&self) -> String {
-        match self.index_type {
-            IndexingType::PreBuilt => {
-                format!("Using pre-built index: {} documents", self.doc_count)
-            }
-            IndexingType::ReadOnly => {
-                format!("Read-only index: {} documents", self.doc_count)
-            }
-            IndexingType::FullIndex => {
-                let total = self.total.load(Ordering::Relaxed);
-                let completed = self.completed.load(Ordering::Relaxed);
-                let errors = self.errors.load(Ordering::Relaxed);
-                format!(
-                    "Indexing: {}/{} completed, {} errors ({:.1}%)",
-                    completed,
-                    total,
-                    errors,
-                    self.progress()
-                )
-            }
-        }
+        format!("Read-only index: {} documents", self.doc_count)
     }
 }
 
@@ -258,15 +175,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_indexing_status_progress() {
-        let status = IndexingStatus::new(100);
-        assert_eq!(status.progress(), 0.0);
-
-        status.completed.store(50, Ordering::Relaxed);
-        assert_eq!(status.progress(), 50.0);
-
-        status.completed.store(100, Ordering::Relaxed);
-        assert_eq!(status.progress(), 100.0);
+    fn test_indexing_status_readonly() {
+        let status = IndexingStatus::for_readonly(100);
+        assert_eq!(status.progress(), 100.0); // Always 100% for read-only
+        assert_eq!(status.doc_count, 100);
     }
 
     #[test]

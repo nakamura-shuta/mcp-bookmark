@@ -21,14 +21,13 @@ Chrome Bookmark MCP Server provides read-only access to Chrome bookmarks via the
   - `scored_snippet.rs` - Intelligent snippet generation with scoring
 - `bin/mcp-bookmark-native.rs` - Native messaging host for Chrome extension
 
-## MCP Tools (6 Available)
+## MCP Tools (5 Available)
 
 1. **search_bookmarks** - Search by title or URL
-2. **list_bookmark_folders** - List bookmark folders
-3. **search_bookmarks_fulltext** - Full-text search with content snippets
-4. **get_indexing_status** - Check indexing progress
-5. **get_available_profiles** - List Chrome profiles
-6. **get_bookmark_content** - Get full content (index-first strategy)
+2. **search_bookmarks_fulltext** - Full-text search with content snippets
+3. **get_indexing_status** - Check indexing progress
+4. **get_available_profiles** - List Chrome profiles
+5. **get_bookmark_content** - Get full content (index-first strategy)
 
 ## Advanced Features
 

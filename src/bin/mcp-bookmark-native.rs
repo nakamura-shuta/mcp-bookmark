@@ -9,8 +9,8 @@ use std::time::Instant;
 
 // Import Tantivy integration from main crate
 use mcp_bookmark::bookmark::FlatBookmark;
-use mcp_bookmark::search::BookmarkSchema;
 use mcp_bookmark::search::indexer::BookmarkIndexer;
+use mcp_bookmark::search::schema::BookmarkSchema;
 use tantivy::Index;
 
 // Import Lindera tokenizer
@@ -51,6 +51,7 @@ struct IndexMetadata {
 // Batch processing state
 #[derive(Debug)]
 struct BatchState {
+    #[allow(dead_code)] // Used for logging and debugging
     batch_id: String,
     total: usize,
     received: HashSet<usize>,
@@ -698,7 +699,7 @@ impl NativeMessagingHost {
 
             if should_commit {
                 let batch_id_clone = batch_id.clone();
-                drop(batch); // Release the mutable borrow
+                // Mutable borrow is automatically released here
                 self.commit_batch_bookmarks(&batch_id_clone);
             }
 

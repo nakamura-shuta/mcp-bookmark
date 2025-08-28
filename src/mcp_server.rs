@@ -62,15 +62,6 @@ impl BookmarkServer {
     }
 
     #[tool(
-        description = "List all available Chrome bookmark folders (not available with INDEX_NAME)"
-    )]
-    fn list_bookmark_folders(&self) -> Result<CallToolResult, McpError> {
-        Ok(CallToolResult::success(vec![Content::text(
-            "Folder listing is not available when using INDEX_NAME. Use search tools to access bookmarks.".to_string()
-        )]))
-    }
-
-    #[tool(
         description = "Search through indexed webpage contents extracted from bookmarked sites using Tantivy full-text search engine"
     )]
     async fn search_bookmarks_fulltext(
@@ -234,14 +225,14 @@ impl ServerHandler for BookmarkServer {
         _request: Option<PaginatedRequestParam>,
         _context: RequestContext<RoleServer>,
     ) -> Result<ListResourcesResult, McpError> {
-        let mut resources = vec![];
-
-        // Resource: bookmark://tree
-        resources.push(self._create_resource(
-            "bookmark://tree",
-            "Bookmark Tree",
-            "Full Chrome bookmark tree",
-        ));
+        let resources = vec![
+            // Resource: bookmark://tree
+            self._create_resource(
+                "bookmark://tree",
+                "Bookmark Tree",
+                "Full Chrome bookmark tree",
+            ),
+        ];
 
         // Folder resources not available with INDEX_NAME approach
         // All bookmarks are accessed through search tools

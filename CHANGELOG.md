@@ -2,12 +2,33 @@
 
 ## [Unreleased]
 
+## [v0.4.4] - 2025-12-18
+
 ### Fixed
 
 - Chrome extension parallel indexing progress tracking
   - Added proper progress callbacks to track indexing status
   - Fixed metrics counting for success and error cases
   - Improved progress reporting to popup UI
+- Removed non-functional `list_bookmark_folders` method
+  - Method didn't work with INDEX_NAME configuration
+  - Simplified API by removing unused functionality
+- Fixed Japanese search test failures
+  - Restored `reload()` method for index updates
+  - Ensured proper index refreshing after content updates
+
+### Changed
+
+- Code cleanup and optimization
+  - Removed dead code warnings
+  - Fixed `dropping_references` warning in native messaging host
+  - Fixed `vec_init_then_push` clippy warning
+  - Partially removed unused constants and methods while preserving Chrome extension dependencies
+
+### Improved
+
+- Test reliability with proper index reloading
+- Build warning reduction for cleaner compilation
 
 ## [v0.4.3] - 2025-08-26
 

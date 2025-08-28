@@ -187,7 +187,9 @@ impl SearchManager {
         let doc_count = searcher.get_stats()?.total_documents;
         let indexing_status = Arc::new(IndexingStatus::new(doc_count));
         if doc_count > 0 {
-            indexing_status.mark_complete();
+            indexing_status
+                .is_complete
+                .store(true, std::sync::atomic::Ordering::Relaxed);
         }
 
         Ok(Self {
@@ -364,12 +366,16 @@ impl SearchManager {
                 match indexer.index_bookmark(writer, bookmark, None) {
                     Ok(_) => {
                         success_count += 1;
-                        self.indexing_status.increment_completed();
+                        self.indexing_status
+                            .completed
+                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     }
                     Err(e) => {
                         tracing::warn!("Failed to index bookmark {}: {}", bookmark.id, e);
                         error_count += 1;
-                        self.indexing_status.increment_errors();
+                        self.indexing_status
+                            .errors
+                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     }
                 }
             }
@@ -377,7 +383,9 @@ impl SearchManager {
             writer.commit().context("Failed to commit index")?;
 
             // Mark indexing as complete
-            self.indexing_status.mark_complete();
+            self.indexing_status
+                .is_complete
+                .store(true, std::sync::atomic::Ordering::Relaxed);
 
             if error_count > 0 {
                 tracing::warn!(

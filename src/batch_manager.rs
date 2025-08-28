@@ -115,7 +115,7 @@ impl BatchIndexManager {
         bookmark: FlatBookmark,
         content: String,
     ) -> Result<()> {
-        let mut should_commit = false;
+        let should_commit;
         let mut bookmarks_to_commit = Vec::new();
 
         // Update batch state

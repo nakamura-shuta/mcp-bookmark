@@ -12,6 +12,5 @@ pub mod unified_searcher;
 
 // Re-export public APIs
 pub use multi_index::MultiIndexSearchManager;
-pub use schema::BookmarkSchema;
 pub use search_manager::SearchManager;
 pub use unified_searcher::{SearchParams, SearchResult};
