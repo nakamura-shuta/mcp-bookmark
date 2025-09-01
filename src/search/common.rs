@@ -127,9 +127,8 @@ pub fn doc_to_result(
         id,
         title,
         url,
-        snippet: scored_snippet.text.clone(),
-        content: scored_snippet.text, // Use snippet for preview
-        full_content: None,           // Don't include full content in search results
+        snippet: scored_snippet.text,
+        full_content: None, // Don't include full content in search results
         score,
         folder_path,
         last_indexed: None,

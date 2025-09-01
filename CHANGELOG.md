@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [v0.4.5] - 2025-01-01
+
+### Changed
+
+- **Token consumption optimization**
+  - Removed duplicate `content` field from `SearchResult` struct
+  - Reduced token usage by ~50-100 tokens per search result
+  - Approximately 1000-2000 tokens saved for 20 search results
+  - Search accuracy maintained while improving efficiency
+
+### Improved
+
+- Documentation and project maintenance
+  - Simplified improvement proposals document
+  - Updated SOW documentation for token optimization
+
 ## [v0.4.4] - 2025-12-18
 
 ### Fixed

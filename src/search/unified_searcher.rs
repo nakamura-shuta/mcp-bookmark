@@ -458,7 +458,6 @@ pub struct SearchResult {
     pub title: String,
     pub url: String,
     pub snippet: String,
-    pub content: String,
     pub full_content: Option<String>,
     pub score: f32,
     pub folder_path: String,
