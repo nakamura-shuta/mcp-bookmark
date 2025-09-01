@@ -16,6 +16,7 @@ mcp-bookmark.exe
 # MCP configuration
 .mcp.json
 /.claude
+.extension_id
 
 # Claude Code configuration
 CLAUDE.md

@@ -118,20 +118,47 @@ setup_extension() {
     
     print_info "Chrome extension found at: $(pwd)/bookmark-indexer-extension"
     echo
+    
+    # 1. Auto-open Chrome extensions page
+    print_info "Opening Chrome extensions page..."
+    open -a "Google Chrome" "chrome://extensions/" 2>/dev/null || true
+    
+    # 2. Copy extension path to clipboard
+    echo "$(pwd)/bookmark-indexer-extension" | pbcopy
+    print_success "Extension path copied to clipboard!"
+    echo
+    
     print_warning "Please follow these steps to install the Chrome extension:"
-    echo "  1. Open Chrome and navigate to chrome://extensions/"
+    echo "  1. ✅ Chrome extensions page should be open"
     echo "  2. Enable 'Developer mode' (top right corner)"
     echo "  3. Click 'Load unpacked'"
-    echo "  4. Select the directory: $(pwd)/bookmark-indexer-extension"
+    echo "  4. Press Cmd+V to paste the extension path (already copied!)"
     echo "  5. Note the Extension ID that appears after loading"
     echo
     
-    # Get extension ID from user
-    read -p "Enter the Chrome Extension ID (found in chrome://extensions/): " EXT_ID
-    
-    if [[ -z "$EXT_ID" ]]; then
-        print_error "Extension ID is required"
-        exit 1
+    # 4. Extension ID save and reuse
+    if [[ -f ".extension_id" ]]; then
+        # Reuse saved Extension ID
+        EXT_ID=$(cat .extension_id)
+        print_success "Using saved Extension ID: $EXT_ID"
+        read -p "Press Enter to continue with this ID, or type a new ID: " NEW_ID
+        if [[ ! -z "$NEW_ID" ]]; then
+            EXT_ID="$NEW_ID"
+            echo "$EXT_ID" > .extension_id
+            print_info "Updated Extension ID: $EXT_ID"
+        fi
+    else
+        # First time - get and save Extension ID
+        read -p "Enter the Chrome Extension ID (found in chrome://extensions/): " EXT_ID
+        
+        if [[ -z "$EXT_ID" ]]; then
+            print_error "Extension ID is required"
+            exit 1
+        fi
+        
+        # Save Extension ID for future use
+        echo "$EXT_ID" > .extension_id
+        print_success "Extension ID saved for future use"
     fi
     
     # Setup native messaging host
