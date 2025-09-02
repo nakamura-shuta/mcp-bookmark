@@ -178,6 +178,16 @@ EOF
 4. Click "Index Selected Folder"
 5. Use the indexed content in your AI assistant
 
+### Important Notes
+
+#### Indexing Notion Pages
+
+When indexing Notion pages from your bookmarks, please note:
+
+- **Use Notion in Browser**: If your browser is configured to open Notion pages in the desktop app, please change the setting to open them in the browser instead
+- The Chrome extension can only access content within the browser, not from desktop applications
+- Bookmark Notion URLs while viewing them in the browser, then proceed with indexing
+
 ### Command Line Options
 
 ```bash
