@@ -187,7 +187,37 @@ class ParallelContentFetcher {
     });
   }
   
+  // Helper function to check if URL is a PDF
+  isPDFUrl(url) {
+    if (!url) return false;
+    const lowerUrl = url.toLowerCase();
+    return lowerUrl.endsWith('.pdf') || 
+           lowerUrl.includes('/pdf/') ||
+           lowerUrl.includes('?format=pdf') ||
+           lowerUrl.includes('&type=pdf') ||
+           lowerUrl.includes('application/pdf');
+  }
+
   async extractContent(tabId) {
+    // Get tab information to check if it's a PDF
+    const tab = await chrome.tabs.get(tabId);
+    const url = tab.url;
+    
+    // Check if URL is a PDF
+    if (this.isPDFUrl(url)) {
+      console.log(`[Parallel] PDF detected: ${url}`);
+      // For PDFs, return minimal info with flags for server-side processing
+      return {
+        title: tab.title || 'PDF Document',
+        url: url,
+        content: '', // Empty content to indicate server processing needed
+        description: '',
+        isPDF: true,
+        requiresServerProcessing: true
+      };
+    }
+    
+    // Regular web page extraction (unchanged)
     const results = await chrome.scripting.executeScript({
       target: { tabId },
       func: () => {
@@ -223,7 +253,9 @@ class ParallelContentFetcher {
           title,
           content,
           description,
-          url: document.location.href
+          url: document.location.href,
+          isPDF: false,
+          requiresServerProcessing: false
         };
       }
     });

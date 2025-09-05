@@ -306,6 +306,8 @@ impl NativeMessagingHost {
                 .unwrap_or_default(),
             date_added: params["date_added"].as_str().map(String::from),
             date_modified: params["date_modified"].as_str().map(String::from),
+            is_pdf: params["isPDF"].as_bool().unwrap_or(false),
+            requires_server_processing: params["requiresServerProcessing"].as_bool().unwrap_or(false),
         };
 
         let content = params["content"].as_str();
@@ -674,6 +676,10 @@ impl NativeMessagingHost {
             date_modified: params["bookmark"]["date_modified"]
                 .as_str()
                 .map(String::from),
+            is_pdf: params["bookmark"]["is_pdf"].as_bool().unwrap_or(false),
+            requires_server_processing: params["bookmark"]["requires_server_processing"]
+                .as_bool()
+                .unwrap_or(false),
         };
 
         let content = params["content"].as_str().map(String::from);
@@ -877,6 +883,8 @@ impl NativeMessagingHost {
                     .unwrap_or_default(),
                 date_added: bookmark_json["date_added"].as_str().map(String::from),
                 date_modified: bookmark_json["date_modified"].as_str().map(String::from),
+                is_pdf: bookmark_json["isPDF"].as_bool().unwrap_or(false),
+                requires_server_processing: bookmark_json["requiresServerProcessing"].as_bool().unwrap_or(false),
             };
 
             let content = bookmark_json["content"].as_str();
