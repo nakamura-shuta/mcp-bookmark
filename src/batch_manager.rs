@@ -1,14 +1,12 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
 
 use crate::bookmark::FlatBookmark;
-use crate::pdf_processor::PDFProcessor;
 use crate::search::SearchManager;
 
 /// Batch processing state
@@ -73,7 +71,6 @@ pub struct BatchResult {
 pub struct BatchIndexManager {
     batches: Arc<Mutex<HashMap<String, BatchState>>>,
     search_manager: Arc<Mutex<SearchManager>>,
-    pdf_processor: Arc<Mutex<Option<PDFProcessor>>>,
     max_buffer_size: usize,
 }
 
@@ -82,17 +79,8 @@ impl BatchIndexManager {
         Self {
             batches: Arc::new(Mutex::new(HashMap::new())),
             search_manager: Arc::new(Mutex::new(search_manager)),
-            pdf_processor: Arc::new(Mutex::new(None)),
             max_buffer_size: 50, // Buffer size before auto-commit
         }
-    }
-    
-    /// Initialize PDF processor
-    pub async fn init_pdf_processor(&self, cache_dir: PathBuf) -> Result<()> {
-        let processor = PDFProcessor::new(cache_dir).await?;
-        let mut pdf_processor = self.pdf_processor.lock().await;
-        *pdf_processor = Some(processor);
-        Ok(())
     }
 
     /// Start a new batch
@@ -216,31 +204,7 @@ impl BatchIndexManager {
 
         debug!("Committing {} bookmarks to index", count);
 
-        for (bookmark, mut content) in bookmarks {
-            // Check if PDF requires server processing
-            if bookmark.requires_server_processing && content.is_empty() {
-                debug!("Processing PDF: {}", bookmark.url);
-                
-                // Try to extract PDF content
-                let pdf_processor = self.pdf_processor.lock().await;
-                if let Some(processor) = pdf_processor.as_ref() {
-                    match processor.extract_from_url(&bookmark.url).await {
-                        Ok(pdf_text) => {
-                            info!("Successfully extracted {} chars from PDF: {}", 
-                                  pdf_text.len(), bookmark.url);
-                            content = pdf_text;
-                        }
-                        Err(e) => {
-                            warn!("Failed to process PDF {}: {}", bookmark.url, e);
-                            content = format!("PDF Document: {}. Content extraction failed.", bookmark.name);
-                        }
-                    }
-                } else {
-                    warn!("PDF processor not initialized, using fallback for: {}", bookmark.url);
-                    content = format!("PDF Document: {}. Server processing not available.", bookmark.name);
-                }
-            }
-            
+        for (bookmark, content) in bookmarks {
             manager
                 .index_bookmark_with_content(&bookmark, Some(&content))
                 .context("Failed to index bookmark")?;
@@ -342,14 +306,12 @@ mod tests {
         // Add bookmarks
         for i in 0..3 {
             let bookmark = FlatBookmark {
-                id: format!("id_{}", i),
-                name: format!("Bookmark {}", i),
-                url: format!("https://example.com/{}", i),
+                id: format!("id_{i}"),
+                name: format!("Bookmark {i}"),
+                url: format!("https://example.com/{i}"),
                 date_added: Some("1234567890".to_string()),
                 date_modified: None,
                 folder_path: vec!["Test".to_string()],
-                is_pdf: false,
-                requires_server_processing: false,
             };
 
             manager
@@ -357,7 +319,7 @@ mod tests {
                     "test_batch".to_string(),
                     i,
                     bookmark,
-                    format!("Content {}", i),
+                    format!("Content {i}"),
                 )
                 .await
                 .unwrap();
@@ -384,8 +346,6 @@ mod tests {
             date_added: None,
             date_modified: None,
             folder_path: vec![],
-            is_pdf: false,
-            requires_server_processing: false,
         };
 
         // Add same index twice
@@ -422,8 +382,6 @@ mod tests {
             date_added: None,
             date_modified: None,
             folder_path: vec![],
-            is_pdf: false,
-            requires_server_processing: false,
         };
 
         let result = manager

@@ -1,6 +1,5 @@
 use mcp_bookmark::search::schema::BookmarkSchema;
 use mcp_bookmark::search::unified_searcher::{SearchResult, UnifiedSearcher};
-use serde_json;
 use tantivy::{Index, doc};
 use tempfile::TempDir;
 
@@ -123,6 +122,6 @@ fn test_memory_efficiency() {
         "Snippet text should appear only once in serialized result"
     );
 
-    println!("Serialized SearchResult size: {} bytes", json_size);
+    println!("Serialized SearchResult size: {json_size} bytes");
     println!("Snippet length: {} chars", snippet_text.len());
 }

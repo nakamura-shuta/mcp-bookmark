@@ -2,7 +2,48 @@
 
 ## [Unreleased]
 
-## [v0.4.5] - 2025-01-01
+## [v0.5.0] - 2025-09-05
+
+### Added
+
+- **Client-side PDF processing** using Chrome extension Offscreen API
+  - PDF.js integration for full PDF text extraction in browser
+  - Offscreen document to bypass Service Worker limitations
+  - Complete PDF content indexing without server processing
+  - Support for multi-page PDF text extraction
+
+### Changed
+
+- **Simplified PDF architecture**
+  - Moved PDF processing from Rust server to Chrome extension
+  - Chrome extension extracts PDF text and sends as regular content
+  - Removed server-side PDF processing complexity
+  - Unified content handling for all bookmark types
+
+### Removed
+
+- **Server-side PDF processing code**
+  - Removed `pdf_processor` module and dependencies
+  - Removed PDF-specific fields from `FlatBookmark` struct
+  - Removed `pdf-extract`, `sha2`, and `tempfile` dependencies
+  - Cleaned up PDF special handling in native messaging host
+
+### Fixed
+
+- **PDF content search functionality**
+  - PDFs now properly indexed with full text content
+  - Search works across all PDF pages (previously metadata only)
+  - Resolved timeout issues with large PDF files
+  - Service Worker compatibility issues with PDF.js resolved
+
+### Improved
+
+- Code simplicity and maintainability
+- Reduced server-side complexity
+- Better error handling for PDF processing
+- Consistent content processing workflow
+
+## [v0.4.5] - 2025-09-01
 
 ### Changed
 
@@ -18,7 +59,7 @@
   - Simplified improvement proposals document
   - Updated SOW documentation for token optimization
 
-## [v0.4.4] - 2025-12-18
+## [v0.4.4] - 2025-8-28
 
 ### Fixed
 

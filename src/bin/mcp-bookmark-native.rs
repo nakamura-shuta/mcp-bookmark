@@ -19,11 +19,15 @@ use lindera::mode::{Mode, Penalty};
 use lindera::segmenter::Segmenter;
 use lindera_tantivy::tokenizer::LinderaTokenizer;
 
+// Configuration constants
+const LOG_FILE_PATH: &str = "/tmp/mcp-bookmark-native.log";
+const INDEX_WRITER_HEAP_SIZE: usize = 50_000_000;
+
 fn log_to_file(msg: &str) {
     if let Ok(mut file) = OpenOptions::new()
         .create(true)
         .append(true)
-        .open("/tmp/mcp-bookmark-native.log")
+        .open(LOG_FILE_PATH)
     {
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -306,8 +310,6 @@ impl NativeMessagingHost {
                 .unwrap_or_default(),
             date_added: params["date_added"].as_str().map(String::from),
             date_modified: params["date_modified"].as_str().map(String::from),
-            is_pdf: params["isPDF"].as_bool().unwrap_or(false),
-            requires_server_processing: params["requiresServerProcessing"].as_bool().unwrap_or(false),
         };
 
         let content = params["content"].as_str();
@@ -568,7 +570,7 @@ impl NativeMessagingHost {
     fn sync_bookmarks(&mut self, _params: Value, id: Value) -> Value {
         // Save metadata after sync
         if let Err(e) = self.save_metadata() {
-            log_to_file(&format!("Failed to save metadata: {}", e));
+            log_to_file(&format!("Failed to save metadata: {e}"));
         }
 
         let now = std::time::SystemTime::now()
@@ -636,10 +638,7 @@ impl NativeMessagingHost {
         };
 
         self.batches.insert(batch_id.clone(), batch);
-        log_to_file(&format!(
-            "Started batch {} with {} bookmarks",
-            batch_id, total
-        ));
+        log_to_file(&format!("Started batch {batch_id} with {total} bookmarks"));
 
         json!({
             "jsonrpc": "2.0",
@@ -676,10 +675,6 @@ impl NativeMessagingHost {
             date_modified: params["bookmark"]["date_modified"]
                 .as_str()
                 .map(String::from),
-            is_pdf: params["bookmark"]["is_pdf"].as_bool().unwrap_or(false),
-            requires_server_processing: params["bookmark"]["requires_server_processing"]
-                .as_bool()
-                .unwrap_or(false),
         };
 
         let content = params["content"].as_str().map(String::from);
@@ -687,7 +682,7 @@ impl NativeMessagingHost {
         // Add to batch
         if let Some(batch) = self.batches.get_mut(&batch_id) {
             if batch.received.contains(&index) {
-                log_to_file(&format!("Duplicate index {} in batch {}", index, batch_id));
+                log_to_file(&format!("Duplicate index {index} in batch {batch_id}"));
                 return json!({
                     "jsonrpc": "2.0",
                     "id": id,
@@ -744,13 +739,12 @@ impl NativeMessagingHost {
             let received = batch.received.len();
 
             log_to_file(&format!(
-                "Batch {} completed: {}/{} bookmarks in {:?}",
-                batch_id, received, total, duration
+                "Batch {batch_id} completed: {received}/{total} bookmarks in {duration:?}"
             ));
 
             // Save metadata
             if let Err(e) = self.save_metadata() {
-                log_to_file(&format!("Failed to save metadata: {}", e));
+                log_to_file(&format!("Failed to save metadata: {e}"));
             }
 
             json!({
@@ -781,8 +775,7 @@ impl NativeMessagingHost {
         let total = params["total"].as_u64().unwrap_or(0);
 
         log_to_file(&format!(
-            "Progress: {}/{} for batch {}",
-            completed, total, batch_id
+            "Progress: {completed}/{total} for batch {batch_id}"
         ));
 
         json!({
@@ -883,14 +876,12 @@ impl NativeMessagingHost {
                     .unwrap_or_default(),
                 date_added: bookmark_json["date_added"].as_str().map(String::from),
                 date_modified: bookmark_json["date_modified"].as_str().map(String::from),
-                is_pdf: bookmark_json["isPDF"].as_bool().unwrap_or(false),
-                requires_server_processing: bookmark_json["requiresServerProcessing"].as_bool().unwrap_or(false),
             };
 
-            let content = bookmark_json["content"].as_str();
+            let content = bookmark_json["content"].as_str().map(String::from);
 
-            // Index the bookmark
-            if let Err(e) = indexer.index_bookmark(&mut writer, &bookmark, content) {
+            // Index the bookmark with content from extension
+            if let Err(e) = indexer.index_bookmark(&mut writer, &bookmark, content.as_deref()) {
                 log_to_file(&format!("Failed to index {}: {}", bookmark.url, e));
                 error_count += 1;
             } else {
@@ -907,7 +898,9 @@ impl NativeMessagingHost {
                                 .duration_since(std::time::UNIX_EPOCH)
                                 .unwrap()
                                 .as_secs(),
-                            content_hash: content.map(|c| Self::calculate_content_hash(Some(c))),
+                            content_hash: content
+                                .as_ref()
+                                .map(|c| Self::calculate_content_hash(Some(c))),
                         },
                     );
                 }
@@ -916,7 +909,7 @@ impl NativeMessagingHost {
 
         // Commit all at once
         if let Err(e) = writer.commit() {
-            log_to_file(&format!("Failed to commit: {}", e));
+            log_to_file(&format!("Failed to commit: {e}"));
             return json!({
                 "jsonrpc": "2.0",
                 "id": id,
@@ -929,12 +922,11 @@ impl NativeMessagingHost {
 
         // Save metadata
         if let Err(e) = self.save_metadata() {
-            log_to_file(&format!("Failed to save metadata: {}", e));
+            log_to_file(&format!("Failed to save metadata: {e}"));
         }
 
         log_to_file(&format!(
-            "Successfully indexed {}/{} bookmarks",
-            success_count, total
+            "Successfully indexed {success_count}/{total} bookmarks"
         ));
 
         json!({
@@ -961,15 +953,16 @@ impl NativeMessagingHost {
     fn commit_batch_bookmarks_internal(&mut self, batch: &mut BatchState) {
         if let Some(indexer) = &self.indexer {
             let count = batch.bookmarks.len();
-            log_to_file(&format!("Committing {} bookmarks from batch", count));
+            log_to_file(&format!("Committing {count} bookmarks from batch"));
 
             // Create writer
-            if let Ok(mut writer) = indexer.create_writer(50_000_000) {
+            if let Ok(mut writer) = indexer.create_writer(INDEX_WRITER_HEAP_SIZE) {
                 for (bookmark, content) in batch.bookmarks.drain(..) {
+                    // Index the bookmark with the content from extension
                     if let Err(e) =
                         indexer.index_bookmark(&mut writer, &bookmark, content.as_deref())
                     {
-                        log_to_file(&format!("Failed to index bookmark: {}", e));
+                        log_to_file(&format!("Failed to index bookmark: {e}"));
                     } else {
                         // Update metadata
                         if let Some(metadata) = &mut self.metadata {
@@ -993,9 +986,9 @@ impl NativeMessagingHost {
                 }
 
                 if let Err(e) = writer.commit() {
-                    log_to_file(&format!("Failed to commit: {}", e));
+                    log_to_file(&format!("Failed to commit: {e}"));
                 } else {
-                    log_to_file(&format!("Successfully committed {} bookmarks", count));
+                    log_to_file(&format!("Successfully committed {count} bookmarks"));
                 }
             }
         }

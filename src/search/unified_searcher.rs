@@ -645,7 +645,7 @@ mod tests {
         // Search for Japanese phrase
         let results = searcher.search("\"React フック\"", 10).unwrap();
         assert!(
-            results.len() >= 1,
+            !results.is_empty(),
             "Should find documents with Japanese phrase"
         );
     }

@@ -1,3 +1,30 @@
+// PDF processing using Offscreen API
+let offscreenCreated = false;
+
+async function ensureOffscreenDocument() {
+  if (offscreenCreated) return;
+  
+  // Check if offscreen document already exists
+  const existingContexts = await chrome.runtime.getContexts({
+    contextTypes: ['OFFSCREEN_DOCUMENT']
+  });
+  
+  if (existingContexts.length > 0) {
+    offscreenCreated = true;
+    return;
+  }
+  
+  // Create offscreen document
+  await chrome.offscreen.createDocument({
+    url: 'offscreen.html',
+    reasons: ['DOM_PARSER'],
+    justification: 'Parse PDFs using PDF.js which requires DOM APIs'
+  });
+  
+  offscreenCreated = true;
+  console.log('[Background] Offscreen document created for PDF processing');
+}
+
 // Bookmark Indexer - Background Service Worker with Parallel Processing
 class ParallelContentFetcher {
   constructor(options = {}) {
@@ -206,15 +233,30 @@ class ParallelContentFetcher {
     // Check if URL is a PDF
     if (this.isPDFUrl(url)) {
       console.log(`[Parallel] PDF detected: ${url}`);
-      // For PDFs, return minimal info with flags for server-side processing
-      return {
-        title: tab.title || 'PDF Document',
-        url: url,
-        content: '', // Empty content to indicate server processing needed
-        description: '',
-        isPDF: true,
-        requiresServerProcessing: true
-      };
+      
+      try {
+        // Extract PDF text using PDF.js
+        const pdfText = await this.extractPdfText(url);
+        console.log(`[Parallel] Extracted ${pdfText.length} chars from PDF`);
+        
+        return {
+          title: tab.title || 'PDF Document',
+          url: url,
+          content: pdfText,
+          description: `PDF Document: ${tab.title}`,
+          isPDF: true
+        };
+      } catch (error) {
+        console.error(`[Parallel] Failed to extract PDF text:`, error);
+        // Fallback: return with minimal content
+        return {
+          title: tab.title || 'PDF Document',
+          url: url,
+          content: `PDF: ${tab.title} - Could not extract text`,
+          description: 'PDF Document',
+          isPDF: true
+        };
+      }
     }
     
     // Regular web page extraction (unchanged)
@@ -254,8 +296,7 @@ class ParallelContentFetcher {
           content,
           description,
           url: document.location.href,
-          isPDF: false,
-          requiresServerProcessing: false
+          isPDF: false
         };
       }
     });
@@ -282,6 +323,39 @@ class ParallelContentFetcher {
     }
     
     chrome.tabs.remove(tabId).catch(() => {});
+  }
+  
+  // Extract text from PDF using offscreen document
+  async extractPdfText(url) {
+    try {
+      console.log(`[PDF] Processing PDF with offscreen document: ${url}`);
+      
+      // Ensure offscreen document exists
+      await ensureOffscreenDocument();
+      
+      // Send message to offscreen document to extract PDF text
+      return new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage(
+          { type: 'extract-pdf-text', url },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              console.error(`[PDF] Error: ${chrome.runtime.lastError.message}`);
+              reject(new Error(chrome.runtime.lastError.message));
+            } else if (response && response.success) {
+              console.log(`[PDF] Successfully extracted ${response.text.length} characters`);
+              resolve(response.text);
+            } else {
+              console.error(`[PDF] Failed to extract text: ${response?.error || 'Unknown error'}`);
+              reject(new Error(response?.error || 'Failed to extract PDF text'));
+            }
+          }
+        );
+      });
+      
+    } catch (error) {
+      console.error(`[PDF] Error extracting text from ${url}:`, error);
+      throw error;
+    }
   }
   
   async fetchSingleWithRetry(url) {
@@ -412,6 +486,13 @@ async function indexFolderParallel(folderId, folderName, indexName) {
   console.log(`[Simple] Index name: "${finalIndexName}"`);
   console.log(`[Simple] Total bookmarks: ${bookmarks.length}`);
   
+  // Check if any bookmarks are PDFs and ensure offscreen document is ready
+  const hasPDFs = bookmarks.some(b => b.url && b.url.toLowerCase().endsWith('.pdf'));
+  if (hasPDFs) {
+    console.log(`[Simple] PDFs detected, preparing offscreen document...`);
+    await ensureOffscreenDocument();
+  }
+  
   try {
     // Step 1: Fetch all content in parallel
     const fetcher = new ParallelContentFetcher({
@@ -450,7 +531,8 @@ async function indexFolderParallel(folderId, folderName, indexName) {
         date_modified: bookmark.dateModified || bookmark.dateAdded,
         content: content?.description ? 
           `${content.description}\n\n${content.content}` : 
-          content?.content || ''
+          content?.content || '',
+        isPDF: content?.isPDF || false
       });
     }
     

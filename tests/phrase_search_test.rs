@@ -38,7 +38,7 @@ fn test_basic_phrase_search() -> Result<()> {
     ];
 
     // Index content
-    let content_map = vec![
+    let content_map = [
         (
             "https://example.com/react-hooks",
             "Learn about React hooks and how to use them in functional components. React hooks provide state management.",
@@ -115,7 +115,7 @@ fn test_phrase_search_with_special_chars() -> Result<()> {
         },
     ];
 
-    let content_map = vec![
+    let content_map = [
         (
             "https://example.com/errors",
             "Common error: Cannot read property 'undefined' of null. This is a typical JavaScript error.",
@@ -167,7 +167,7 @@ fn test_japanese_phrase_search() -> Result<()> {
         },
     ];
 
-    let content_map = vec![
+    let content_map = [
         (
             "https://example.com/react-hooks-ja",
             "React フックを使用して状態管理を行います。React フックは関数コンポーネントで使用できます。",
@@ -188,7 +188,7 @@ fn test_japanese_phrase_search() -> Result<()> {
 
     // Search for Japanese phrase
     let results = manager.search("\"React フック\"", 10)?;
-    assert!(results.len() >= 1, "Should find Japanese phrase");
+    assert!(!results.is_empty(), "Should find Japanese phrase");
     // The first result should be the document with the exact phrase
     assert!(results[0].url.contains("react-hooks-ja"));
 
@@ -201,7 +201,7 @@ fn test_empty_phrase_search() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let index_path = temp_dir.path().join("test_index");
 
-    let bookmarks = vec![FlatBookmark {
+    let bookmarks = [FlatBookmark {
         id: "1".to_string(),
         name: "Test document".to_string(),
         url: "https://example.com/test".to_string(),
@@ -235,7 +235,7 @@ fn test_unclosed_phrase_search() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let index_path = temp_dir.path().join("test_index");
 
-    let bookmarks = vec![FlatBookmark {
+    let bookmarks = [FlatBookmark {
         id: "1".to_string(),
         name: "React hooks useState".to_string(),
         url: "https://example.com/test".to_string(),
@@ -253,7 +253,7 @@ fn test_unclosed_phrase_search() -> Result<()> {
 
     // Unclosed quote should be treated as a phrase from quote to end
     let results = manager.search("\"React hooks useState", 10)?;
-    assert!(results.len() >= 1, "Unclosed phrase should still search");
+    assert!(!results.is_empty(), "Unclosed phrase should still search");
     assert_eq!(results[0].url, "https://example.com/test");
 
     Ok(())
@@ -284,7 +284,7 @@ fn test_multiple_phrases_search() -> Result<()> {
         },
     ];
 
-    let content_map = vec![
+    let content_map = [
         (
             "https://example.com/rsc",
             "React Server Components allow server-side rendering. Client Components handle interactivity.",

@@ -7,6 +7,7 @@
 💡 **Key Features**:
 
 - 🔐 **Works with authenticated pages** - Chrome extension fetches content from your logged-in browser
+- 📄 **Full PDF support** - PDF.js client-side text extraction with Offscreen API, searchable across all pages
 - ⚡ **Fast local search** - Indexed with Tantivy engine, no external API calls
 - 🎯 **AI-friendly** - Claude can search bookmark contents to answer your questions
 
@@ -15,6 +16,7 @@
 ## Features
 
 - **Full-Text Search**: Search bookmark content using Tantivy search engine
+- **PDF Full-Text Search**: Client-side PDF.js text extraction using Offscreen API, full content indexing across multi-page PDFs
 - **Phrase Search**: Use quotes for exact phrase matching (e.g., "React hooks")
 - **Chrome Extension**: Index bookmark content directly from browser
 - **Custom Indexes**: Create and manage multiple independent indexes

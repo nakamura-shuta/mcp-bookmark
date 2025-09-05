@@ -6,7 +6,7 @@ mod simple_tests {
     use lindera_tantivy::tokenizer::LinderaTokenizer;
     use tantivy::collector::TopDocs;
     use tantivy::query::QueryParser;
-    use tantivy::schema::{IndexRecordOption, STORED, Schema, TextFieldIndexing, TextOptions};
+    use tantivy::schema::{IndexRecordOption, Schema, TextFieldIndexing, TextOptions};
     use tantivy::{Index, doc};
 
     #[test]

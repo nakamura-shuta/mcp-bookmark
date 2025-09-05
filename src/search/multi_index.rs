@@ -302,14 +302,14 @@ mod tests {
         let mut results = Vec::new();
         for i in 0..10 {
             results.push(SearchResult {
-                id: format!("{}", i),
-                url: format!("http://example{}.com", i),
-                title: format!("Example {}", i),
-                snippet: format!("Snippet {}", i),
+                id: format!("{i}"),
+                url: format!("http://example{i}.com"),
+                title: format!("Example {i}"),
+                snippet: format!("Snippet {i}"),
                 score: (10 - i) as f32 / 10.0,
                 context_type: Some("RegularText".to_string()),
                 full_content: None,
-                folder_path: format!("folder{}", i),
+                folder_path: format!("folder{i}"),
                 last_indexed: None,
             });
         }

@@ -71,10 +71,6 @@ impl BookmarkNode {
     fn flatten_recursive(&self, result: &mut Vec<FlatBookmark>) {
         if self.is_url() {
             if let Some(url) = &self.url {
-                let is_pdf = url.to_lowercase().ends_with(".pdf") || 
-                           url.to_lowercase().contains("/pdf/") ||
-                           url.to_lowercase().contains("?format=pdf");
-                
                 result.push(FlatBookmark {
                     id: self.id.clone(),
                     name: self.name.clone(),
@@ -82,8 +78,6 @@ impl BookmarkNode {
                     date_added: self.date_added.clone(),
                     date_modified: self.date_modified.clone(),
                     folder_path: self.folder_path.clone(),
-                    is_pdf,
-                    requires_server_processing: is_pdf,
                 });
             }
         }
@@ -140,10 +134,6 @@ pub struct FlatBookmark {
     pub date_added: Option<String>,
     pub date_modified: Option<String>,
     pub folder_path: Vec<String>,
-    #[serde(default)]
-    pub is_pdf: bool,
-    #[serde(default)]
-    pub requires_server_processing: bool,
 }
 
 /// Chrome bookmark reader

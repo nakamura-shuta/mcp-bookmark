@@ -1,15 +1,9 @@
-mod bookmark;
-mod config;
-mod content;
-mod mcp_server;
-mod search;
-
 use anyhow::Result;
-use bookmark::BookmarkReader;
-use config::Config;
-use mcp_server::BookmarkServer;
+use mcp_bookmark::bookmark::BookmarkReader;
+use mcp_bookmark::config::Config;
+use mcp_bookmark::mcp_server::BookmarkServer;
+use mcp_bookmark::search::search_manager_trait::SearchManagerTrait;
 use rmcp::{ServiceExt, transport::stdio};
-use search::{MultiIndexSearchManager, SearchManager, search_manager_trait::SearchManagerTrait};
 use std::env;
 use std::sync::Arc;
 use tracing_appender::{non_blocking, rolling};
@@ -322,7 +316,7 @@ async fn main() -> Result<()> {
     let search_manager: Arc<dyn SearchManagerTrait> = if config.is_multi_index() {
         // Use multi-index search manager
         tracing::info!("Initializing multi-index search");
-        match MultiIndexSearchManager::new(&config) {
+        match mcp_bookmark::search::MultiIndexSearchManager::new(&config) {
             Ok(manager) => {
                 let status = manager.get_indexing_status_string();
                 tracing::info!("{}", status);
@@ -330,7 +324,7 @@ async fn main() -> Result<()> {
             }
             Err(e) => {
                 tracing::error!("Failed to initialize multi-index search: {}", e);
-                eprintln!("Error: Failed to initialize multi-index search: {}", e);
+                eprintln!("Error: Failed to initialize multi-index search: {e}");
                 eprintln!("\nPlease check:");
                 eprintln!(
                     "  1. All specified indices exist (use --list-indexes to see available indexes)"
@@ -342,7 +336,9 @@ async fn main() -> Result<()> {
         }
     } else {
         // Single index mode
-        match SearchManager::open_readonly(config.index_name.as_deref().unwrap()) {
+        match mcp_bookmark::search::SearchManager::open_readonly(
+            config.index_name.as_deref().unwrap(),
+        ) {
             Ok(manager) => {
                 tracing::info!("Using index in read-only mode (lock-free)");
                 Arc::new(manager)

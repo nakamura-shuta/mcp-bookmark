@@ -61,16 +61,16 @@ async fn test_two_bookmarks_immediate_commit() {
 
     for i in 0..2 {
         let bookmark = FlatBookmark {
-            id: format!("id_{}", i),
-            name: format!("Site {}", i),
-            url: format!("https://example.com/{}", i),
+            id: format!("id_{i}"),
+            name: format!("Site {i}"),
+            url: format!("https://example.com/{i}"),
             date_added: Some("1234567890".to_string()),
             date_modified: None,
             folder_path: vec!["Test".to_string()],
         };
 
         manager
-            .add_to_batch("two".to_string(), i, bookmark, format!("Content {}", i))
+            .add_to_batch("two".to_string(), i, bookmark, format!("Content {i}"))
             .await
             .unwrap();
     }
@@ -95,21 +95,16 @@ async fn test_parallel_batch_processing() {
     // Add bookmarks sequentially (can't share manager reference across threads)
     for i in 0..10 {
         let bookmark = FlatBookmark {
-            id: format!("id_{}", i),
-            name: format!("Site {}", i),
-            url: format!("https://example.com/{}", i),
+            id: format!("id_{i}"),
+            name: format!("Site {i}"),
+            url: format!("https://example.com/{i}"),
             date_added: Some("1234567890".to_string()),
             date_modified: None,
             folder_path: vec!["Parallel".to_string()],
         };
 
         manager
-            .add_to_batch(
-                "parallel".to_string(),
-                i,
-                bookmark,
-                format!("Content {}", i),
-            )
+            .add_to_batch("parallel".to_string(), i, bookmark, format!("Content {i}"))
             .await
             .unwrap();
     }
@@ -217,9 +212,9 @@ async fn test_auto_commit_at_buffer_size() {
     // Add 50 bookmarks - should trigger auto-commit at buffer size
     for i in 0..50 {
         let bookmark = FlatBookmark {
-            id: format!("id_{}", i),
-            name: format!("Site {}", i),
-            url: format!("https://example.com/{}", i),
+            id: format!("id_{i}"),
+            name: format!("Site {i}"),
+            url: format!("https://example.com/{i}"),
             date_added: None,
             date_modified: None,
             folder_path: vec![],
@@ -230,7 +225,7 @@ async fn test_auto_commit_at_buffer_size() {
                 "buffer_test".to_string(),
                 i,
                 bookmark,
-                format!("Content {}", i),
+                format!("Content {i}"),
             )
             .await
             .unwrap();
@@ -243,9 +238,9 @@ async fn test_auto_commit_at_buffer_size() {
     // Add more bookmarks
     for i in 50..100 {
         let bookmark = FlatBookmark {
-            id: format!("id_{}", i),
-            name: format!("Site {}", i),
-            url: format!("https://example.com/{}", i),
+            id: format!("id_{i}"),
+            name: format!("Site {i}"),
+            url: format!("https://example.com/{i}"),
             date_added: None,
             date_modified: None,
             folder_path: vec![],
@@ -256,7 +251,7 @@ async fn test_auto_commit_at_buffer_size() {
                 "buffer_test".to_string(),
                 i,
                 bookmark,
-                format!("Content {}", i),
+                format!("Content {i}"),
             )
             .await
             .unwrap();

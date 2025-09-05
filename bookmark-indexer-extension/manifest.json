@@ -8,12 +8,14 @@
     "nativeMessaging",
     "bookmarks",
     "tabs",
-    "scripting"
+    "scripting",
+    "offscreen"
   ],
   
   "host_permissions": [
     "http://*/*",
-    "https://*/*"
+    "https://*/*",
+    "file:///*"
   ],
   
   "action": {

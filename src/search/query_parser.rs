@@ -12,8 +12,8 @@ pub enum QueryTerm {
 impl fmt::Display for QueryTerm {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            QueryTerm::Phrase(phrase) => write!(f, "\"{}\"", phrase),
-            QueryTerm::Word(word) => write!(f, "{}", word),
+            QueryTerm::Phrase(phrase) => write!(f, "\"{phrase}\""),
+            QueryTerm::Word(word) => write!(f, "{word}"),
         }
     }
 }
@@ -36,12 +36,12 @@ impl QueryParser {
     /// ```
     pub fn parse(query: &str) -> Vec<QueryTerm> {
         let mut terms = Vec::new();
-        let mut chars = query.chars().peekable();
+        let chars = query.chars().peekable();
         let mut current = String::new();
         let mut in_phrase = false;
         let mut escape_next = false;
 
-        while let Some(ch) = chars.next() {
+        for ch in chars {
             if escape_next {
                 current.push(ch);
                 escape_next = false;
