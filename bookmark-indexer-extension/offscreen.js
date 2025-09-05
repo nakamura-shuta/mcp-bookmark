@@ -28,6 +28,13 @@ async function extractPdfText(url) {
       throw new Error(`HTTP ${response.status} ${response.statusText}`);
     }
     
+    // Check content type to ensure it's actually a PDF
+    const contentType = response.headers.get('content-type');
+    if (contentType && !contentType.includes('application/pdf')) {
+      console.warn(`[Offscreen] URL is not a PDF (content-type: ${contentType}): ${url}`);
+      throw new Error(`Not a PDF file (content-type: ${contentType})`);
+    }
+    
     const arrayBuffer = await response.arrayBuffer();
     console.log(`[Offscreen] Downloaded ${arrayBuffer.byteLength} bytes`);
     
