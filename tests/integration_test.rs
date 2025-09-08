@@ -8,8 +8,10 @@ mod tests {
     #[test]
     fn test_search_integration() {
         // Create reader with index_name set
-        let mut config = Config::default();
-        config.index_name = Some("test_integration_index".to_string());
+        let config = Config {
+            index_name: Some("test_integration_index".to_string()),
+            ..Default::default()
+        };
         let reader = BookmarkReader::with_config(config).unwrap();
 
         // Get all bookmarks

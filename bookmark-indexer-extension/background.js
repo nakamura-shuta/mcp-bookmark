@@ -214,7 +214,7 @@ class ParallelContentFetcher {
     });
   }
   
-  // Helper function to check if URL is a PDF
+  // Helper function to check if URL is a PDF (including local files)
   isPDFUrl(url) {
     if (!url) return false;
     const lowerUrl = url.toLowerCase();
@@ -222,7 +222,8 @@ class ParallelContentFetcher {
            lowerUrl.includes('/pdf/') ||
            lowerUrl.includes('?format=pdf') ||
            lowerUrl.includes('&type=pdf') ||
-           lowerUrl.includes('application/pdf');
+           lowerUrl.includes('application/pdf') ||
+           (url.startsWith('file:///') && lowerUrl.includes('.pdf'));
   }
 
   async extractContent(tabId) {

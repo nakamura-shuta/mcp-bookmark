@@ -475,8 +475,10 @@ mod tests {
     #[test]
     fn test_search_manager_creation() {
         let temp_dir = TempDir::new().unwrap();
-        let mut config = crate::config::Config::default();
-        config.index_name = Some("test_index".to_string());
+        let _config = crate::config::Config {
+            index_name: Some("test_index".to_string()),
+            ..Default::default()
+        };
 
         let result = SearchManager::new(Some(temp_dir.path().to_path_buf()));
         assert!(result.is_ok());
@@ -484,8 +486,10 @@ mod tests {
 
     #[test]
     fn test_index_key_generation() {
-        let mut config = Config::default();
-        config.index_name = Some("custom_index".to_string());
+        let config = Config {
+            index_name: Some("custom_index".to_string()),
+            ..Default::default()
+        };
         assert_eq!(SearchManager::get_index_key(&config), "custom_index");
 
         let config_no_name = Config::default();

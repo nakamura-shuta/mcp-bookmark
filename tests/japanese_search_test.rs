@@ -24,8 +24,10 @@ mod japanese_search_tests {
         let index_path = temp_dir.path().to_path_buf();
 
         // Create config with test index
-        let mut config = Config::default();
-        config.index_name = Some("test_japanese_index".to_string());
+        let _config = Config {
+            index_name: Some("test_japanese_index".to_string()),
+            ..Default::default()
+        };
 
         // Create search manager
         let mut manager = SearchManager::new(Some(index_path)).unwrap();
@@ -215,7 +217,7 @@ mod japanese_search_tests {
         let mut manager = SearchManager::new(Some(index_path)).unwrap();
 
         // Simulate the Notion page content
-        let content = "各種設定情報 データベース関連 レポート info \
+        let _content = "各種設定情報 データベース関連 レポート info \
                       デプロイ：https://vercel.com/guides/set-up-a-staging-environment-on-vercel \
                       4/11までの質問 田中さんの出社日 基本的に平日はslack OK \
                       打ち合わせは18,25は可能な予定 それぞれのドメインとvercelが発行するURLの関係など";
@@ -236,11 +238,11 @@ mod japanese_search_tests {
         manager.commit().unwrap();
 
         // Test the specific search case
-        let results = manager.search("田中さんの出社日", 10).unwrap();
+        let _results = manager.search("田中さんの出社日", 10).unwrap();
         // This will pass once content indexing is properly implemented
 
         // Test with space-separated query
-        let results = manager.search("田中 出社日", 10).unwrap();
+        let _results = manager.search("田中 出社日", 10).unwrap();
         // This should work with Lindera tokenizer
     }
 }

@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+## [v0.5.1] - 2025-09-08
+
+### Added
+
+- **Configurable snippet length** for search results
+  - New `max_snippet_length` field in Config struct (default: 600 chars)
+  - Consistent snippet length handling across all search components
+  - Dynamic context window calculation based on snippet length
+
+### Improved
+
+- **Search result quality**
+  - Better context detection with proportional window sizes
+  - UTF-8 safe snippet truncation for all languages
+  - More consistent snippet generation across different search paths
+
+- **Documentation**
+  - Added detailed instructions for indexing local PDF files
+  - Clear step-by-step guide for adding PDFs to bookmarks
+  - Updated README with local PDF workflow
+
+### Fixed
+
+- **Chrome extension PDF detection**
+  - Improved detection for local PDF files (file:/// protocol)
+  - Better handling of various PDF URL patterns
+  - Fixed edge cases in PDF identification logic
+
 ## [v0.5.0] - 2025-09-05
 
 ### Added

@@ -3,7 +3,7 @@
   "name": "Bookmark Indexer",
   "version": "1.0.0",
   "description": "Index bookmark content to local Tantivy search engine",
-  
+
   "permissions": [
     "nativeMessaging",
     "bookmarks",
@@ -11,13 +11,9 @@
     "scripting",
     "offscreen"
   ],
-  
-  "host_permissions": [
-    "http://*/*",
-    "https://*/*",
-    "file:///*"
-  ],
-  
+
+  "host_permissions": ["http://*/*", "https://*/*", "file:///*"],
+
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -27,11 +23,11 @@
       "128": "images/icon128.png"
     }
   },
-  
+
   "background": {
     "service_worker": "background.js"
   },
-  
+
   "icons": {
     "16": "images/icon16.png",
     "32": "images/icon32.png",

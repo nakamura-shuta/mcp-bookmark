@@ -11,6 +11,7 @@ use serde_json::json;
 use std::sync::Arc;
 
 use crate::bookmark::BookmarkReader;
+use crate::config::Config;
 use crate::search::{SearchParams, search_manager_trait::SearchManagerTrait};
 
 // Tool request/response types
@@ -41,6 +42,7 @@ pub struct BookmarkServer {
     #[allow(dead_code)]
     pub reader: Arc<BookmarkReader>,
     pub search_manager: Arc<dyn SearchManagerTrait>,
+    pub config: Config,
     tool_router: ToolRouter<Self>,
 }
 
@@ -50,6 +52,7 @@ impl BookmarkServer {
         Self {
             reader,
             search_manager,
+            config: Config::default(),
             tool_router: Self::tool_router(),
         }
     }
@@ -96,10 +99,11 @@ impl BookmarkServer {
                 let is_complete = self.search_manager.is_indexing_complete();
 
                 // Limit response size for MCP to avoid token limits
+                let max_snippet_length = self.config.max_snippet_length;
                 for result in &mut results {
-                    // Limit snippet text to 300 chars (UTF-8 safe)
-                    if result.snippet.len() > 300 {
-                        let mut end = 300;
+                    // Limit snippet text (UTF-8 safe)
+                    if result.snippet.len() > max_snippet_length {
+                        let mut end = max_snippet_length;
                         while end > 0 && !result.snippet.is_char_boundary(end) {
                             end -= 1;
                         }

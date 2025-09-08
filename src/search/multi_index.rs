@@ -188,6 +188,7 @@ mod tests {
         let config = Config {
             index_name: Some("work,personal,research".to_string()),
             max_bookmarks: 0,
+            ..Default::default()
         };
 
         let names = config.parse_index_names();
@@ -202,6 +203,7 @@ mod tests {
         let config = Config {
             index_name: Some("work , personal , research".to_string()),
             max_bookmarks: 0,
+            ..Default::default()
         };
 
         let names = config.parse_index_names();
@@ -216,6 +218,7 @@ mod tests {
         let config = Config {
             index_name: Some("work".to_string()),
             max_bookmarks: 0,
+            ..Default::default()
         };
 
         let names = config.parse_index_names();
@@ -229,6 +232,7 @@ mod tests {
         let config = Config {
             index_name: None,
             max_bookmarks: 0,
+            ..Default::default()
         };
 
         let names = config.parse_index_names();

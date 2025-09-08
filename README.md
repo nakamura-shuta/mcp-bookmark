@@ -182,6 +182,27 @@ EOF
 
 ### Important Notes
 
+#### Indexing Local PDFs
+
+To index locally stored PDF files:
+
+1. **Open Local PDFs in Chrome**:
+   - Type `file:///` in Chrome's address bar, or drag and drop the PDF file into Chrome
+   - Or, right-click the PDF in Finder → "Open With" → "Google Chrome"
+
+2. **Add to Bookmarks**:
+   - Once the PDF is open in Chrome, press ⌘+D (Mac) or Ctrl+D (Windows) to bookmark
+   - Save to an appropriate folder (the folder you'll index)
+
+3. **Index with Chrome Extension**:
+   - Select the target folder in the extension popup
+   - Click "Index Selected Folder"
+   - PDF.js automatically extracts and indexes text from all pages
+
+4. **Use in Search**:
+   - Example: "Search my bookmarks for Linux kernel information"
+   - Search across all pages within the PDF
+
 #### Indexing Notion Pages
 
 When indexing Notion pages from your bookmarks, please note:

@@ -121,7 +121,10 @@ pub fn doc_to_result(
         .to_string();
 
     // Generate snippet with context detection
-    let scored_snippet = snippet_generator.generate_snippet(&content, query, 300);
+    // Use config's max_snippet_length (default: 600)
+    let config = crate::config::Config::default();
+    let scored_snippet =
+        snippet_generator.generate_snippet(&content, query, config.max_snippet_length);
 
     Ok(SearchResult {
         id,
@@ -161,9 +164,10 @@ pub struct CommonSearchConfig {
 
 impl Default for CommonSearchConfig {
     fn default() -> Self {
+        let config = crate::config::Config::default();
         Self {
             max_results: 100,
-            max_snippet_length: 300,
+            max_snippet_length: config.max_snippet_length,
             enable_boosting: true,
         }
     }

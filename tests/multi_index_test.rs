@@ -6,6 +6,7 @@ fn test_multi_index_parsing() {
     let mut config = Config {
         index_name: Some("single_index".to_string()),
         max_bookmarks: 0,
+        ..Default::default()
     };
 
     let indices = config.parse_index_names();

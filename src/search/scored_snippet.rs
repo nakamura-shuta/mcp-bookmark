@@ -52,10 +52,13 @@ pub struct ScoredSnippetGenerator {
 
 impl ScoredSnippetGenerator {
     pub fn new() -> Self {
+        let config = crate::config::Config::default();
+        // Use 1.5x the configured snippet length for internal buffer
+        let buffer_size = config.max_snippet_length + (config.max_snippet_length / 2);
         Self {
-            max_snippet_length: 400, // Increased for better context
-            max_snippets: 5,         // Return more snippets with scores
-            context_window: 100,     // Larger context window
+            max_snippet_length: buffer_size,
+            max_snippets: 5,
+            context_window: config.max_snippet_length / 3, // 1/3 of snippet length
         }
     }
 
@@ -153,9 +156,10 @@ impl ScoredSnippetGenerator {
         let content_lower = content.to_lowercase();
         let mut matches = Vec::new();
 
-        // Sliding window analysis
-        let window_size = 300;
-        let step = 100;
+        // Sliding window analysis - use configured snippet length
+        let config = crate::config::Config::default();
+        let window_size = config.max_snippet_length;
+        let step = config.max_snippet_length / 3;
 
         for start in (0..content.len()).step_by(step) {
             let mut start_byte = start;
