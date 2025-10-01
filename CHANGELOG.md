@@ -2,6 +2,54 @@
 
 ## [Unreleased]
 
+## [v0.5.2] - 2025-10-01
+
+### Added
+
+- **Page number extraction for PDF search results**
+  - Automatic page number detection from `[PAGE:n]` markers in PDF content
+  - `page_number` field added to `SearchResult` struct for efficient navigation
+  - Support for direct page marker detection and position-based lookup
+  - Handles truncated snippets with ellipsis correctly
+
+- **Page-based PDF content retrieval**
+  - New `get_bookmark_content_range` MCP tool for retrieving specific PDF pages
+  - Supports single page (start_page = end_page) or page ranges
+  - 1-indexed page numbers for user-friendly API
+  - Regex-based page marker extraction with `[PAGE:n]` format
+
+### Changed
+
+- **Chrome extension PDF processing**
+  - Changed page marker format from `--- Page n ---` to `[PAGE:n]` for better parsing
+  - Added page metadata tracking (page_count, page_offsets, content_type)
+  - Enhanced background.js to pass page_info through native messaging
+
+- **Tantivy schema extension**
+  - Added three new fields: `page_count`, `page_offsets`, `content_type`
+  - Extended indexer to store PDF page information
+  - Modified `create_document` to accept optional `PageInfo` parameter
+
+- **Enhanced `get_bookmark_content` tool**
+  - Added warning for large content (>100k characters)
+  - Suggests using `get_bookmark_content_range` for better performance
+
+### Improved
+
+- **Search efficiency for large PDFs**
+  - Users can now directly navigate to relevant pages without manual exploration
+  - Search results display page numbers, enabling targeted page retrieval
+  - Reduced token consumption by retrieving only necessary pages
+
+- **Documentation**
+  - Added "Chunked Content Retrieval" section to ARCHITECTURE.md
+  - Updated README with `get_bookmark_content_range` usage examples
+  - Comprehensive unit tests for page number extraction (5 test cases)
+
+### Fixed
+
+- All 45 unit tests passing with new page_number functionality
+
 ## [v0.5.1] - 2025-09-08
 
 ### Added
