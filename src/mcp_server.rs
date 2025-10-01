@@ -38,26 +38,12 @@ pub struct GetBookmarkContentRequest {
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
-pub struct GetBookmarkMetadataRequest {
-    #[schemars(description = "Exact URL of the bookmark to retrieve metadata for")]
-    pub url: String,
-}
-
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
-pub struct GetBookmarkContentByPageRequest {
-    #[schemars(description = "Exact URL of the PDF bookmark")]
-    pub url: String,
-    #[schemars(description = "Page number to retrieve (1-indexed)")]
-    pub page_number: usize,
-}
-
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct GetBookmarkContentRangeRequest {
     #[schemars(description = "Exact URL of the PDF bookmark")]
     pub url: String,
-    #[schemars(description = "Start page number (1-indexed, inclusive)")]
+    #[schemars(description = "Start page number (1-indexed, inclusive). For single page, set start_page = end_page")]
     pub start_page: usize,
-    #[schemars(description = "End page number (1-indexed, inclusive)")]
+    #[schemars(description = "End page number (1-indexed, inclusive). For single page, set start_page = end_page")]
     pub end_page: usize,
 }
 
@@ -178,7 +164,7 @@ impl BookmarkServer {
     }
 
     #[tool(
-        description = "Retrieve complete indexed webpage content for a specific bookmark URL from the local Tantivy search index"
+        description = "Retrieve complete indexed webpage content for a specific bookmark URL from the local Tantivy search index. For large PDF files, consider using get_bookmark_content_range instead to retrieve specific pages."
     )]
     async fn get_bookmark_content(
         &self,
@@ -187,6 +173,17 @@ impl BookmarkServer {
         // Get content from URL (from index or new fetch)
         match self.search_manager.get_content_by_url(&req.url).await {
             Ok(Some(content)) => {
+                // Check content size and warn if too large
+                const WARNING_THRESHOLD: usize = 100_000; // 100k characters
+                let size_warning = if content.len() > WARNING_THRESHOLD {
+                    Some(format!(
+                        "⚠️ Large content detected ({} chars). For better performance with large PDFs, consider using get_bookmark_content_range to retrieve specific pages instead of the entire document.",
+                        content.len()
+                    ))
+                } else {
+                    None
+                };
+
                 // Also get bookmark information
                 let search_results = self
                     .search_manager
@@ -204,13 +201,17 @@ impl BookmarkServer {
                     ("Unknown".to_string(), None)
                 };
 
-                let response = json!({
+                let mut response = json!({
                     "url": req.url,
                     "title": title,
                     "folder_path": folder_path,
                     "content": content,
                     "content_length": content.len(),
                 });
+
+                if let Some(warning) = size_warning {
+                    response["warning"] = json!(warning);
+                }
 
                 let content_json = serde_json::to_string_pretty(&response)
                     .unwrap_or_else(|e| format!("Error serializing response: {e}"));
@@ -226,6 +227,49 @@ impl BookmarkServer {
             Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
                 "Error fetching content for URL {}: {}",
                 req.url, e
+            ))])),
+        }
+    }
+
+    #[tool(
+        description = "Retrieve specific page(s) from a PDF bookmark. For single page, set start_page = end_page. For range, set start_page < end_page. Page numbers are 1-indexed."
+    )]
+    async fn get_bookmark_content_range(
+        &self,
+        Parameters(req): Parameters<GetBookmarkContentRangeRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self
+            .search_manager
+            .get_page_range_content(&req.url, req.start_page, req.end_page)
+            .await
+        {
+            Ok(Some(content)) => {
+                let page_desc = if req.start_page == req.end_page {
+                    format!("page {}", req.start_page)
+                } else {
+                    format!("pages {}-{}", req.start_page, req.end_page)
+                };
+
+                let response = json!({
+                    "url": req.url,
+                    "start_page": req.start_page,
+                    "end_page": req.end_page,
+                    "page_range": page_desc,
+                    "content": content,
+                    "content_length": content.len(),
+                });
+
+                let content_json = serde_json::to_string_pretty(&response)
+                    .unwrap_or_else(|e| format!("Error serializing response: {e}"));
+                Ok(CallToolResult::success(vec![Content::text(content_json)]))
+            }
+            Ok(None) => Ok(CallToolResult::error(vec![Content::text(format!(
+                "Content not found for URL: {}. The bookmark may not exist in the index.",
+                req.url
+            ))])),
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
+                "Error retrieving pages {}-{} for URL {}: {}",
+                req.start_page, req.end_page, req.url, e
             ))])),
         }
     }

@@ -27,13 +27,7 @@ pub trait SearchManagerTrait: Send + Sync + Debug {
     /// Get content by URL
     async fn get_content_by_url(&self, url: &str) -> Result<Option<String>>;
 
-    /// Get metadata for a bookmark (page count, content type, etc.)
-    async fn get_metadata_by_url(&self, url: &str) -> Result<Option<BookmarkMetadata>>;
-
-    /// Get specific page content from a PDF bookmark
-    async fn get_page_content(&self, url: &str, page_number: usize) -> Result<Option<String>>;
-
-    /// Get page range content from a PDF bookmark
+    /// Get page range content from a PDF bookmark (for single page, use start_page = end_page)
     async fn get_page_range_content(
         &self,
         url: &str,

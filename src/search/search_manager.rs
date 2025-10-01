@@ -326,6 +326,100 @@ impl SearchManager {
         self.searcher.get_content_by_url(url)
     }
 
+    /// Get page range from a PDF bookmark
+    pub fn get_page_range_from_index(
+        &self,
+        url: &str,
+        start_page: usize,
+        end_page: usize,
+    ) -> Result<Option<String>> {
+        use regex::Regex;
+
+        // Validate page range
+        if start_page == 0 || end_page == 0 {
+            return Err(anyhow::anyhow!("Page numbers must be 1-indexed (start from 1)"));
+        }
+        if start_page > end_page {
+            return Err(anyhow::anyhow!(
+                "start_page ({}) must be <= end_page ({})",
+                start_page,
+                end_page
+            ));
+        }
+
+        // Get full content first
+        let content = match self.get_full_content_by_url(url)? {
+            Some(c) => c,
+            None => return Ok(None),
+        };
+
+        // Parse page markers
+        let page_marker_re = Regex::new(r"\[PAGE:(\d+)\]").unwrap();
+        let mut page_positions: Vec<(usize, usize)> = page_marker_re
+            .find_iter(&content)
+            .map(|m| {
+                let page_num = page_marker_re
+                    .captures(m.as_str())
+                    .unwrap()
+                    .get(1)
+                    .unwrap()
+                    .as_str()
+                    .parse::<usize>()
+                    .unwrap();
+                (page_num, m.start())
+            })
+            .collect();
+
+        if page_positions.is_empty() {
+            // No page markers found - this is not a PDF
+            return Err(anyhow::anyhow!(
+                "No page markers found. This bookmark may not be a PDF or was indexed before page support was added."
+            ));
+        }
+
+        // Check if requested pages exist
+        let max_page = page_positions.iter().map(|(num, _)| *num).max().unwrap_or(0);
+        if end_page > max_page {
+            return Err(anyhow::anyhow!(
+                "Requested end_page ({}) exceeds available pages ({})",
+                end_page,
+                max_page
+            ));
+        }
+
+        // Sort by position
+        page_positions.sort_by_key(|(_, pos)| *pos);
+
+        // Find start and end positions
+        let start_pos = page_positions
+            .iter()
+            .find(|(num, _)| *num == start_page)
+            .map(|(_, pos)| *pos);
+
+        let end_pos = if end_page < max_page {
+            // Get position of next page after end_page
+            page_positions
+                .iter()
+                .find(|(num, _)| *num == end_page + 1)
+                .map(|(_, pos)| *pos)
+        } else {
+            // Last page - go to end of content
+            Some(content.len())
+        };
+
+        match (start_pos, end_pos) {
+            (Some(start), Some(end)) => {
+                let range_content = &content[start..end];
+                Ok(Some(range_content.to_string()))
+            }
+            _ => Err(anyhow::anyhow!(
+                "Could not find page range {}-{} in content",
+                start_page,
+                end_page
+            )),
+        }
+    }
+
     /// Get index statistics
     pub fn get_stats(&self) -> Result<IndexStats> {
         let stats = self.searcher.get_stats()?;
@@ -447,17 +541,6 @@ impl SearchManagerTrait for SearchManager {
 
     async fn get_content_by_url(&self, url: &str) -> Result<Option<String>> {
         self.get_full_content_by_url(url)
-    }
-
-    async fn get_metadata_by_url(
-        &self,
-        url: &str,
-    ) -> Result<Option<super::search_manager_trait::BookmarkMetadata>> {
-        self.get_bookmark_metadata(url)
-    }
-
-    async fn get_page_content(&self, url: &str, page_number: usize) -> Result<Option<String>> {
-        self.get_page_content_from_index(url, page_number)
     }
 
     async fn get_page_range_content(

@@ -170,6 +170,21 @@ impl SearchManagerTrait for MultiIndexSearchManager {
         Ok(None)
     }
 
+    async fn get_page_range_content(
+        &self,
+        url: &str,
+        start_page: usize,
+        end_page: usize,
+    ) -> Result<Option<String>> {
+        // Try to get page range from any index that has it
+        for manager in &self.managers {
+            if let Ok(Some(content)) = manager.get_page_range_content(url, start_page, end_page).await {
+                return Ok(Some(content));
+            }
+        }
+        Ok(None)
+    }
+
     fn get_indexing_status(&self) -> String {
         self.get_indexing_status_string()
     }
