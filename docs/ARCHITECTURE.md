@@ -23,11 +23,10 @@ Chrome Bookmark MCP Server provides read-only access to Chrome bookmarks via the
 
 ## MCP Tools (5 Available)
 
-1. **search_bookmarks** - Search by title or URL
-2. **search_bookmarks_fulltext** - Full-text search with content snippets
-3. **get_indexing_status** - Check indexing progress
-4. **get_available_profiles** - List Chrome profiles
-5. **get_bookmark_content** - Get full content (index-first strategy)
+1. **search_bookmarks_fulltext** - Full-text search with content snippets
+2. **get_indexing_status** - Check indexing progress
+3. **get_bookmark_content** - Get full content (index-first strategy)
+4. **get_bookmark_content_range** (v0.6.0) - Get specific pages from PDF bookmarks
 
 ## Advanced Features
 
@@ -93,6 +92,14 @@ Set via environment variables:
 | Search Query | < 100ms |
 | Multi-index Search | Parallel execution |
 | Batch Processing | 50 bookmarks per commit |
+
+### Chunked Content Retrieval (v0.6.0)
+- **Page-based PDF access** - Retrieve specific pages without loading entire PDF
+- **Token limit protection** - Prevents token overflow on large documents (17MB+ PDFs)
+- **Page markers** - Content indexed with `[PAGE:n]` markers for navigation
+- **Smart warnings** - Alerts when content >100k chars, suggests using page retrieval
+- **Flexible retrieval** - Single page or page ranges (e.g., pages 40-45)
+- **Schema extension** - page_count, page_offsets, content_type fields in index
 
 ### Search Features
 - **Chrome extension indexing** - Pre-built indexes via browser extension

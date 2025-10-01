@@ -230,7 +230,7 @@ mod tests {
         let bookmark = create_test_bookmark();
 
         let doc = indexer
-            .create_document(&bookmark, Some("test content"))
+            .create_document(&bookmark, Some("test content"), None)
             .unwrap();
 
         // Verify document has all required fields

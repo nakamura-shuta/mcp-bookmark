@@ -237,9 +237,18 @@ INDEX_NAME="work,personal,research" ./mcp-bookmark
   - Returns preview snippets (300 chars) for quick identification
   - Automatically limited to prevent token overflow
   - Use `limit` parameter to control result count
+
 - `get_bookmark_content` - Get complete content for specific URL
   - Use after search to get full page content
-  - No size limitations
+  - ⚠️ For large PDFs (>100k chars), warns and suggests using `get_bookmark_content_range`
+
+- `get_bookmark_content_range` - Get specific pages from PDF bookmarks (v0.6.0+)
+  - **Single page**: `get_bookmark_content_range(url, 10, 10)` - retrieves page 10
+  - **Page range**: `get_bookmark_content_range(url, 40, 45)` - retrieves pages 40-45
+  - Page numbers are 1-indexed
+  - Ideal for large PDF files to avoid token limits
+  - Returns content with page markers for reference
+
 - `get_indexing_status` - Check indexing progress
 
 ## Index Storage
