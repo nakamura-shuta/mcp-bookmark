@@ -449,6 +449,26 @@ impl SearchManagerTrait for SearchManager {
         self.get_full_content_by_url(url)
     }
 
+    async fn get_metadata_by_url(
+        &self,
+        url: &str,
+    ) -> Result<Option<super::search_manager_trait::BookmarkMetadata>> {
+        self.get_bookmark_metadata(url)
+    }
+
+    async fn get_page_content(&self, url: &str, page_number: usize) -> Result<Option<String>> {
+        self.get_page_content_from_index(url, page_number)
+    }
+
+    async fn get_page_range_content(
+        &self,
+        url: &str,
+        start_page: usize,
+        end_page: usize,
+    ) -> Result<Option<String>> {
+        self.get_page_range_from_index(url, start_page, end_page)
+    }
+
     fn get_indexing_status(&self) -> String {
         if self.read_only {
             format!(

@@ -9,7 +9,7 @@ use std::time::Instant;
 
 // Import Tantivy integration from main crate
 use mcp_bookmark::bookmark::FlatBookmark;
-use mcp_bookmark::search::indexer::BookmarkIndexer;
+use mcp_bookmark::search::indexer::{BookmarkIndexer, PageInfo};
 use mcp_bookmark::search::schema::BookmarkSchema;
 use tantivy::Index;
 
@@ -880,8 +880,39 @@ impl NativeMessagingHost {
 
             let content = bookmark_json["content"].as_str().map(String::from);
 
-            // Index the bookmark with content from extension
-            if let Err(e) = indexer.index_bookmark(&mut writer, &bookmark, content.as_deref()) {
+            // Parse page_info if available (for PDFs)
+            let page_info = bookmark_json["page_info"].as_object().and_then(|obj| {
+                let page_count = obj.get("page_count")?.as_u64()? as usize;
+                let page_offsets = obj
+                    .get("page_offsets")?
+                    .as_array()?
+                    .iter()
+                    .filter_map(|v| v.as_u64().map(|n| n as usize))
+                    .collect::<Vec<_>>();
+                let content_type = obj.get("content_type")?.as_str()?.to_string();
+                let total_chars = obj.get("total_chars")?.as_u64()? as usize;
+
+                Some(PageInfo {
+                    page_count,
+                    page_offsets,
+                    content_type,
+                    total_chars,
+                })
+            });
+
+            // Index the bookmark with content and page info from extension
+            let index_result = if let Some(ref page_info) = page_info {
+                indexer.index_bookmark_with_page_info(
+                    &mut writer,
+                    &bookmark,
+                    content.as_deref(),
+                    Some(page_info),
+                )
+            } else {
+                indexer.index_bookmark(&mut writer, &bookmark, content.as_deref())
+            };
+
+            if let Err(e) = index_result {
                 log_to_file(&format!("Failed to index {}: {}", bookmark.url, e));
                 error_count += 1;
             } else {

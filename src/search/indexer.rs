@@ -1,10 +1,20 @@
 use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
 use tantivy::{Index, IndexWriter, TantivyDocument};
 use tracing::{debug, warn};
 
 use super::common::{DEFAULT_WRITER_HEAP_SIZE, MIN_WRITER_HEAP_SIZE, extract_domain, parse_date};
 use super::schema::BookmarkSchema;
 use crate::bookmark::FlatBookmark;
+
+/// Page information for chunked content (PDFs)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageInfo {
+    pub page_count: usize,
+    pub page_offsets: Vec<usize>,
+    pub content_type: String,
+    pub total_chars: usize,
+}
 
 /// Handles indexing operations for bookmarks
 #[derive(Debug)]
@@ -35,7 +45,20 @@ impl BookmarkIndexer {
         bookmark: &FlatBookmark,
         content: Option<&str>,
     ) -> Result<()> {
-        let doc = self.create_document(bookmark, content)?;
+        let doc = self.create_document(bookmark, content, None)?;
+        writer.add_document(doc)?;
+        Ok(())
+    }
+
+    /// Index a single bookmark with page information
+    pub fn index_bookmark_with_page_info(
+        &self,
+        writer: &mut IndexWriter,
+        bookmark: &FlatBookmark,
+        content: Option<&str>,
+        page_info: Option<&PageInfo>,
+    ) -> Result<()> {
+        let doc = self.create_document(bookmark, content, page_info)?;
         writer.add_document(doc)?;
         Ok(())
     }
@@ -45,6 +68,7 @@ impl BookmarkIndexer {
         &self,
         bookmark: &FlatBookmark,
         content: Option<&str>,
+        page_info: Option<&PageInfo>,
     ) -> Result<TantivyDocument> {
         let domain = extract_domain(&bookmark.url).unwrap_or_default();
 
@@ -65,6 +89,20 @@ impl BookmarkIndexer {
         doc.add_text(self.schema.domain, &domain);
         doc.add_i64(self.schema.date_added, date_added);
         doc.add_i64(self.schema.date_modified, date_modified);
+
+        // Add page information if available (for PDFs)
+        if let Some(page_info) = page_info {
+            doc.add_u64(self.schema.page_count, page_info.page_count as u64);
+            doc.add_text(self.schema.content_type, &page_info.content_type);
+
+            // Serialize page offsets as JSON bytes
+            let offsets_json = serde_json::to_vec(&page_info.page_offsets)?;
+            doc.add_bytes(self.schema.page_offsets, &offsets_json);
+        } else {
+            // Add default values for non-PDF content
+            doc.add_u64(self.schema.page_count, 0);
+            doc.add_text(self.schema.content_type, "html");
+        }
 
         Ok(doc)
     }
@@ -108,6 +146,16 @@ impl BookmarkIndexer {
 
     /// Update a single bookmark in the index
     pub fn update_bookmark(&self, bookmark: &FlatBookmark, content: Option<&str>) -> Result<()> {
+        self.update_bookmark_with_page_info(bookmark, content, None)
+    }
+
+    /// Update a single bookmark in the index with page information
+    pub fn update_bookmark_with_page_info(
+        &self,
+        bookmark: &FlatBookmark,
+        content: Option<&str>,
+        page_info: Option<&PageInfo>,
+    ) -> Result<()> {
         let mut writer = self.create_writer(10_000_000)?;
 
         // Delete old document
@@ -115,7 +163,7 @@ impl BookmarkIndexer {
         writer.delete_term(id_term);
 
         // Add updated document
-        self.index_bookmark(&mut writer, bookmark, content)?;
+        self.index_bookmark_with_page_info(&mut writer, bookmark, content, page_info)?;
 
         writer.commit()?;
         debug!("Updated bookmark {} in index", bookmark.id);

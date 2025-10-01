@@ -16,6 +16,10 @@ pub struct BookmarkSchema {
     pub domain: Field,
     pub date_added: Field,
     pub date_modified: Field,
+    // Page information fields (for chunked content retrieval)
+    pub page_count: Field,
+    pub page_offsets: Field,
+    pub content_type: Field,
 }
 
 impl BookmarkSchema {
@@ -54,6 +58,11 @@ impl BookmarkSchema {
         let date_added = builder.add_i64_field("date_added", STORED | FAST);
         let date_modified = builder.add_i64_field("date_modified", STORED | FAST);
 
+        // Page information fields for chunked content retrieval (optional, only for PDFs)
+        let page_count = builder.add_u64_field("page_count", STORED | FAST);
+        let page_offsets = builder.add_bytes_field("page_offsets", STORED);
+        let content_type = builder.add_text_field("content_type", STRING | STORED);
+
         let schema = builder.build();
 
         Self {
@@ -66,6 +75,9 @@ impl BookmarkSchema {
             domain,
             date_added,
             date_modified,
+            page_count,
+            page_offsets,
+            content_type,
         }
     }
 
@@ -99,6 +111,9 @@ mod tests {
         assert!(schema.schema.get_field("domain").is_ok());
         assert!(schema.schema.get_field("date_added").is_ok());
         assert!(schema.schema.get_field("date_modified").is_ok());
+        assert!(schema.schema.get_field("page_count").is_ok());
+        assert!(schema.schema.get_field("page_offsets").is_ok());
+        assert!(schema.schema.get_field("content_type").is_ok());
     }
 
     #[test]

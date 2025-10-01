@@ -37,6 +37,30 @@ pub struct GetBookmarkContentRequest {
     pub url: String,
 }
 
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct GetBookmarkMetadataRequest {
+    #[schemars(description = "Exact URL of the bookmark to retrieve metadata for")]
+    pub url: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct GetBookmarkContentByPageRequest {
+    #[schemars(description = "Exact URL of the PDF bookmark")]
+    pub url: String,
+    #[schemars(description = "Page number to retrieve (1-indexed)")]
+    pub page_number: usize,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct GetBookmarkContentRangeRequest {
+    #[schemars(description = "Exact URL of the PDF bookmark")]
+    pub url: String,
+    #[schemars(description = "Start page number (1-indexed, inclusive)")]
+    pub start_page: usize,
+    #[schemars(description = "End page number (1-indexed, inclusive)")]
+    pub end_page: usize,
+}
+
 #[derive(Debug, Clone)]
 pub struct BookmarkServer {
     #[allow(dead_code)]

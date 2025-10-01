@@ -230,22 +230,23 @@ class ParallelContentFetcher {
     // Get tab information to check if it's a PDF
     const tab = await chrome.tabs.get(tabId);
     const url = tab.url;
-    
+
     // Check if URL is a PDF
     if (this.isPDFUrl(url)) {
       console.log(`[Parallel] PDF detected: ${url}`);
-      
+
       try {
-        // Extract PDF text using PDF.js
-        const pdfText = await this.extractPdfText(url);
-        console.log(`[Parallel] Extracted ${pdfText.length} chars from PDF`);
-        
+        // Extract PDF text using PDF.js (returns {text, page_info})
+        const pdfResult = await this.extractPdfText(url);
+        console.log(`[Parallel] Extracted ${pdfResult.text.length} chars from PDF`);
+
         return {
           title: tab.title || 'PDF Document',
           url: url,
-          content: pdfText,
+          content: pdfResult.text,
           description: `PDF Document: ${tab.title}`,
-          isPDF: true
+          isPDF: true,
+          page_info: pdfResult.page_info
         };
       } catch (error) {
         console.error(`[Parallel] Failed to extract PDF text:`, error);
@@ -330,10 +331,10 @@ class ParallelContentFetcher {
   async extractPdfText(url) {
     try {
       console.log(`[PDF] Processing PDF with offscreen document: ${url}`);
-      
+
       // Ensure offscreen document exists
       await ensureOffscreenDocument();
-      
+
       // Send message to offscreen document to extract PDF text
       return new Promise((resolve, reject) => {
         chrome.runtime.sendMessage(
@@ -343,8 +344,12 @@ class ParallelContentFetcher {
               console.error(`[PDF] Error: ${chrome.runtime.lastError.message}`);
               reject(new Error(chrome.runtime.lastError.message));
             } else if (response && response.success) {
-              console.log(`[PDF] Successfully extracted ${response.text.length} characters`);
-              resolve(response.text);
+              console.log(`[PDF] Successfully extracted ${response.text.length} characters from ${response.page_info?.page_count || 0} pages`);
+              // Return both text and page_info
+              resolve({
+                text: response.text,
+                page_info: response.page_info
+              });
             } else {
               console.error(`[PDF] Failed to extract text: ${response?.error || 'Unknown error'}`);
               reject(new Error(response?.error || 'Failed to extract PDF text'));
@@ -352,7 +357,7 @@ class ParallelContentFetcher {
           }
         );
       });
-      
+
     } catch (error) {
       console.error(`[PDF] Error extracting text from ${url}:`, error);
       throw error;
@@ -521,20 +526,27 @@ async function indexFolderParallel(folderId, folderName, indexName) {
     
     // Step 2: Prepare all bookmark data with content
     const bookmarksWithContent = [];
-    
+
     for (const { bookmark, content } of results.successful) {
-      bookmarksWithContent.push({
+      const bookmarkData = {
         id: bookmark.id,
         url: bookmark.url,
         title: bookmark.title || content?.title || '',
         folder_path: bookmark.folder_path || [],
         date_added: bookmark.dateAdded,
         date_modified: bookmark.dateModified || bookmark.dateAdded,
-        content: content?.description ? 
-          `${content.description}\n\n${content.content}` : 
+        content: content?.description ?
+          `${content.description}\n\n${content.content}` :
           content?.content || '',
         isPDF: content?.isPDF || false
-      });
+      };
+
+      // Add page_info if available (for PDFs)
+      if (content?.page_info) {
+        bookmarkData.page_info = content.page_info;
+      }
+
+      bookmarksWithContent.push(bookmarkData);
     }
     
     // Add failed items with empty content
