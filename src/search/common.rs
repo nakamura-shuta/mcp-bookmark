@@ -126,6 +126,9 @@ pub fn doc_to_result(
     let scored_snippet =
         snippet_generator.generate_snippet(&content, query, config.max_snippet_length);
 
+    // Extract page number from snippet (for PDF content)
+    let page_number = extract_page_number_from_snippet(&scored_snippet.text, &content);
+
     Ok(SearchResult {
         id,
         title,
@@ -136,6 +139,7 @@ pub fn doc_to_result(
         folder_path,
         last_indexed: None,
         context_type: Some(format!("{:?}", scored_snippet.context_type)),
+        page_number,
     })
 }
 
@@ -149,6 +153,59 @@ pub fn extract_domain(url: &str) -> Option<String> {
 /// Parse date string to timestamp
 pub fn parse_date(date: &Option<String>) -> Option<i64> {
     date.as_ref()?.parse::<i64>().ok()
+}
+
+/// Extract page number from snippet by finding the closest [PAGE:n] marker
+/// in the full content before the snippet position
+pub fn extract_page_number_from_snippet(snippet: &str, full_content: &str) -> Option<usize> {
+    use regex::Regex;
+
+    // If content doesn't have page markers, return None
+    if !full_content.contains("[PAGE:") {
+        return None;
+    }
+
+    // Check if snippet contains a page marker directly
+    let page_marker_re = Regex::new(r"\[PAGE:(\d+)\]").ok()?;
+    if let Some(cap) = page_marker_re.captures(snippet) {
+        if let Some(page_str) = cap.get(1) {
+            if let Ok(page_num) = page_str.as_str().parse::<usize>() {
+                return Some(page_num);
+            }
+        }
+    }
+
+    // Find the position of the snippet in the full content
+    // Remove ellipsis and extract a meaningful search string
+    let snippet_search = snippet
+        .trim_start_matches("...")
+        .trim_end_matches("...")
+        .split("[PAGE:")
+        .next()
+        .unwrap_or(snippet)
+        .trim()
+        .chars()
+        .take(30)
+        .collect::<String>();
+
+    if snippet_search.is_empty() || snippet_search.len() < 10 {
+        return None;
+    }
+
+    let snippet_pos = full_content.find(&snippet_search)?;
+
+    // Find all page markers before this position
+    let mut last_page: Option<usize> = None;
+
+    for cap in page_marker_re.captures_iter(&full_content[..snippet_pos]) {
+        if let Some(page_str) = cap.get(1) {
+            if let Ok(page_num) = page_str.as_str().parse::<usize>() {
+                last_page = Some(page_num);
+            }
+        }
+    }
+
+    last_page
 }
 
 /// Common search configuration
@@ -205,5 +262,36 @@ mod tests {
         );
         assert_eq!(parse_date(&Some("invalid".to_string())), None);
         assert_eq!(parse_date(&None), None);
+    }
+
+    #[test]
+    fn test_extract_page_number_from_snippet() {
+        // Test with PDF content with page markers
+        let full_content = "[PAGE:1]First page content.[PAGE:2]Second page content with important info.[PAGE:3]Third page.";
+        let snippet = "Second page content with important info";
+
+        let page_num = extract_page_number_from_snippet(snippet, full_content);
+        assert_eq!(page_num, Some(2));
+
+        // Test with content at the beginning
+        let snippet2 = "First page content";
+        let page_num2 = extract_page_number_from_snippet(snippet2, full_content);
+        assert_eq!(page_num2, Some(1));
+
+        // Test with non-PDF content (no page markers)
+        let html_content = "This is regular HTML content without page markers";
+        let html_snippet = "regular HTML content";
+        let page_num3 = extract_page_number_from_snippet(html_snippet, html_content);
+        assert_eq!(page_num3, None);
+
+        // Test with snippet that contains page marker directly
+        let snippet4 = "[PAGE:6]Some content on page 6";
+        let page_num4 = extract_page_number_from_snippet(snippet4, full_content);
+        assert_eq!(page_num4, Some(6));
+
+        // Test with truncated snippet (has ellipsis)
+        let snippet5 = "...Second page content with";
+        let page_num5 = extract_page_number_from_snippet(snippet5, full_content);
+        assert_eq!(page_num5, Some(2));
     }
 }

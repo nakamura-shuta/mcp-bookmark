@@ -337,7 +337,9 @@ impl SearchManager {
 
         // Validate page range
         if start_page == 0 || end_page == 0 {
-            return Err(anyhow::anyhow!("Page numbers must be 1-indexed (start from 1)"));
+            return Err(anyhow::anyhow!(
+                "Page numbers must be 1-indexed (start from 1)"
+            ));
         }
         if start_page > end_page {
             return Err(anyhow::anyhow!(
@@ -378,7 +380,11 @@ impl SearchManager {
         }
 
         // Check if requested pages exist
-        let max_page = page_positions.iter().map(|(num, _)| *num).max().unwrap_or(0);
+        let max_page = page_positions
+            .iter()
+            .map(|(num, _)| *num)
+            .max()
+            .unwrap_or(0);
         if end_page > max_page {
             return Err(anyhow::anyhow!(
                 "Requested end_page ({}) exceeds available pages ({})",

@@ -463,6 +463,7 @@ pub struct SearchResult {
     pub folder_path: String,
     pub last_indexed: Option<String>,
     pub context_type: Option<String>,
+    pub page_number: Option<usize>,
 }
 
 /// Index statistics

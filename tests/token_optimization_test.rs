@@ -16,6 +16,7 @@ fn test_search_result_no_duplicate_content() {
         folder_path: "/test/path".to_string(),
         last_indexed: None,
         context_type: Some("Content".to_string()),
+        page_number: None,
     };
 
     // Serialize to JSON to verify structure
@@ -106,6 +107,7 @@ fn test_memory_efficiency() {
         folder_path: "/test".to_string(),
         last_indexed: None,
         context_type: None,
+        page_number: None,
     };
 
     // Calculate approximate memory usage

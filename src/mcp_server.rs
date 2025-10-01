@@ -41,9 +41,13 @@ pub struct GetBookmarkContentRequest {
 pub struct GetBookmarkContentRangeRequest {
     #[schemars(description = "Exact URL of the PDF bookmark")]
     pub url: String,
-    #[schemars(description = "Start page number (1-indexed, inclusive). For single page, set start_page = end_page")]
+    #[schemars(
+        description = "Start page number (1-indexed, inclusive). For single page, set start_page = end_page"
+    )]
     pub start_page: usize,
-    #[schemars(description = "End page number (1-indexed, inclusive). For single page, set start_page = end_page")]
+    #[schemars(
+        description = "End page number (1-indexed, inclusive). For single page, set start_page = end_page"
+    )]
     pub end_page: usize,
 }
 

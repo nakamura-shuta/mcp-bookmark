@@ -178,7 +178,10 @@ impl SearchManagerTrait for MultiIndexSearchManager {
     ) -> Result<Option<String>> {
         // Try to get page range from any index that has it
         for manager in &self.managers {
-            if let Ok(Some(content)) = manager.get_page_range_content(url, start_page, end_page).await {
+            if let Ok(Some(content)) = manager
+                .get_page_range_content(url, start_page, end_page)
+                .await
+            {
                 return Ok(Some(content));
             }
         }
@@ -272,6 +275,7 @@ mod tests {
                 full_content: None,
                 folder_path: "folder1".to_string(),
                 last_indexed: None,
+                page_number: None,
             },
             SearchResult {
                 id: "2".to_string(),
@@ -283,6 +287,7 @@ mod tests {
                 full_content: None,
                 folder_path: "folder2".to_string(),
                 last_indexed: None,
+                page_number: None,
             },
             SearchResult {
                 id: "3".to_string(),
@@ -294,6 +299,7 @@ mod tests {
                 full_content: None,
                 folder_path: "folder3".to_string(),
                 last_indexed: None,
+                page_number: None,
             },
         ];
 
@@ -330,6 +336,7 @@ mod tests {
                 full_content: None,
                 folder_path: format!("folder{i}"),
                 last_indexed: None,
+                page_number: None,
             });
         }
 
