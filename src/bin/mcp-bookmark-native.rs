@@ -63,11 +63,28 @@ struct BatchState {
     start_time: Instant,
 }
 
+// Chunk session state for large content transfer
+#[derive(Debug)]
+struct ChunkSession {
+    bookmark_id: String,
+    total_chunks: usize,
+    received_chunks: HashMap<usize, String>, // chunk_index -> chunk_content
+    // Bookmark metadata (received with first chunk)
+    url: Option<String>,
+    title: Option<String>,
+    folder_path: Option<Vec<String>>,
+    date_added: Option<String>,
+    date_modified: Option<String>,
+    page_info: Option<PageInfo>,
+    start_time: Instant,
+}
+
 struct NativeMessagingHost {
     indexer: Option<BookmarkIndexer>,
     index_name: String,
     metadata: Option<IndexMetadata>,
     batches: HashMap<String, BatchState>,
+    chunk_sessions: HashMap<String, ChunkSession>, // chunk_session_id -> ChunkSession
 }
 
 impl NativeMessagingHost {
@@ -77,6 +94,7 @@ impl NativeMessagingHost {
             index_name: "Extension_Bookmarks".to_string(),
             metadata: None,
             batches: HashMap::new(),
+            chunk_sessions: HashMap::new(),
         }
     }
 
@@ -196,6 +214,7 @@ impl NativeMessagingHost {
     fn handle_message(&mut self, message: Value) -> Value {
         let method = message["method"].as_str().unwrap_or("");
         let id = message["id"].clone();
+        log_to_file(&format!("handle_message: method={method}"));
 
         match method {
             "ping" => {
@@ -211,15 +230,18 @@ impl NativeMessagingHost {
             }
 
             "index_bookmark" => {
+                log_to_file("handle_message: index_bookmark branch");
                 // Update index name if provided in params
                 if let Some(index_name) = message["params"]["index_name"].as_str() {
                     self.index_name = index_name.to_string();
                     self.indexer = None; // Reset indexer to use new index
                     log_to_file(&format!("Index name updated to: {}", self.index_name));
                 }
+                log_to_file("handle_message: before init_tantivy check");
 
                 // Initialize indexer if needed
                 if self.indexer.is_none() {
+                    log_to_file("handle_message: calling init_tantivy...");
                     if let Err(e) = self.init_tantivy() {
                         return json!({
                             "jsonrpc": "2.0",
@@ -230,8 +252,12 @@ impl NativeMessagingHost {
                             }
                         });
                     }
+                    log_to_file("handle_message: init_tantivy completed");
                 }
-                self.index_bookmark(message["params"].clone(), id)
+                log_to_file("handle_message: calling index_bookmark...");
+                let result = self.index_bookmark(message["params"].clone(), id);
+                log_to_file("handle_message: index_bookmark completed");
+                result
             }
 
             "get_stats" => self.get_index_stats(id),
@@ -241,6 +267,9 @@ impl NativeMessagingHost {
             "sync_bookmarks" => self.sync_bookmarks(message["params"].clone(), id),
 
             "check_for_updates" => self.check_for_updates(message["params"].clone(), id),
+
+            // Chunk-based content transfer for large PDFs
+            "index_bookmark_chunk" => self.index_bookmark_chunk(message["params"].clone(), id),
 
             // Batch processing methods
             "batch_start" => self.batch_start(message["params"].clone(), id),
@@ -283,6 +312,34 @@ impl NativeMessagingHost {
     }
 
     fn index_bookmark(&mut self, params: Value, id: Value) -> Value {
+        log_to_file("index_bookmark: START");
+
+        // Update index name if provided in params
+        if let Some(index_name) = params["index_name"].as_str() {
+            if self.index_name != index_name {
+                self.index_name = index_name.to_string();
+                self.indexer = None; // Reset indexer to use new index
+                log_to_file(&format!("Index name updated to: {}", self.index_name));
+            }
+        }
+        log_to_file("index_bookmark: After index name check");
+
+        // Initialize indexer if needed
+        if self.indexer.is_none() {
+            log_to_file("index_bookmark: Initializing Tantivy...");
+            if let Err(e) = self.init_tantivy() {
+                return json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "error": {
+                        "code": -32603,
+                        "message": format!("Failed to initialize index: {}", e)
+                    }
+                });
+            }
+            log_to_file("index_bookmark: Tantivy initialized");
+        }
+
         let Some(indexer) = &self.indexer else {
             return json!({
                 "jsonrpc": "2.0",
@@ -315,6 +372,26 @@ impl NativeMessagingHost {
         let content = params["content"].as_str();
         let skip_if_unchanged = params["skip_if_unchanged"].as_bool().unwrap_or(false);
 
+        // Parse page_info if available (for PDFs)
+        let page_info = params["page_info"].as_object().and_then(|obj| {
+            let page_count = obj.get("page_count")?.as_u64()? as usize;
+            let page_offsets = obj
+                .get("page_offsets")?
+                .as_array()?
+                .iter()
+                .filter_map(|v| v.as_u64().map(|n| n as usize))
+                .collect::<Vec<_>>();
+            let content_type = obj.get("content_type")?.as_str()?.to_string();
+            let total_chars = obj.get("total_chars")?.as_u64()? as usize;
+
+            Some(PageInfo {
+                page_count,
+                page_offsets,
+                content_type,
+                total_chars,
+            })
+        });
+
         // Check if we should skip this bookmark
         if skip_if_unchanged {
             if let Some(metadata) = &self.metadata {
@@ -338,13 +415,19 @@ impl NativeMessagingHost {
         }
 
         log_to_file(&format!(
-            "Indexing bookmark: {} with content: {} chars",
+            "Indexing bookmark: {} with content: {} chars, page_info: {}",
             bookmark.url,
-            content.map(|c| c.len()).unwrap_or(0)
+            content.map(|c| c.len()).unwrap_or(0),
+            page_info.is_some()
         ));
 
-        // Index the bookmark
-        match self.index_single_bookmark(indexer, &bookmark, content) {
+        // Index the bookmark with page info if available
+        match self.index_single_bookmark_with_page_info(
+            indexer,
+            &bookmark,
+            content,
+            page_info.as_ref(),
+        ) {
             Ok(_) => {
                 // Update metadata
                 if let Some(metadata) = &mut self.metadata {
@@ -393,15 +476,340 @@ impl NativeMessagingHost {
         }
     }
 
-    fn index_single_bookmark(
+    fn index_single_bookmark_with_page_info(
         &self,
         indexer: &BookmarkIndexer,
         bookmark: &FlatBookmark,
         content: Option<&str>,
+        page_info: Option<&PageInfo>,
     ) -> Result<()> {
-        // Use update_bookmark which handles deletion of old document
-        indexer.update_bookmark(bookmark, content)?;
+        log_to_file("index_single_bookmark_with_page_info: START");
+
+        // Max chars per document to prevent Lindera tokenizer from hanging
+        // 100K chars is a safe limit for Japanese text tokenization
+        // (~300KB in UTF-8, tokenizable in reasonable time)
+        const MAX_CHARS_PER_DOC: usize = 100_000;
+
+        // Create a writer for this single bookmark
+        log_to_file("index_single_bookmark_with_page_info: creating writer...");
+        let mut writer = indexer.create_writer(INDEX_WRITER_HEAP_SIZE)?;
+        log_to_file("index_single_bookmark_with_page_info: writer created");
+
+        // Delete any existing parts of this bookmark first
+        // Use 0..1000 to match delete_bookmark_parts (supports up to 1000 parts)
+        let id_term = tantivy::Term::from_field_text(indexer.schema().id, &bookmark.id);
+        writer.delete_term(id_term);
+        // Delete potential parts (up to 1000 parts max, matching indexer.rs)
+        for part_num in 0..1000 {
+            let part_id = format!("{}_part_{}", bookmark.id, part_num);
+            let part_term = tantivy::Term::from_field_text(indexer.schema().id, &part_id);
+            writer.delete_term(part_term);
+        }
+        log_to_file("index_single_bookmark_with_page_info: existing documents deleted");
+
+        // Index with page-based splitting if we have page info and large content
+        if let (Some(content_str), Some(pi)) = (content, page_info) {
+            let char_count = content_str.chars().count();
+            log_to_file(&format!(
+                "index_single_bookmark_with_page_info: content has {} chars, {} pages",
+                char_count, pi.page_count
+            ));
+
+            if char_count > MAX_CHARS_PER_DOC && pi.page_count > 1 {
+                // Use page-based splitting for large PDFs
+                log_to_file("index_single_bookmark_with_page_info: using page-based splitting");
+                let doc_count = indexer.index_bookmark_with_page_splitting(
+                    &mut writer,
+                    bookmark,
+                    content_str,
+                    pi,
+                    MAX_CHARS_PER_DOC,
+                )?;
+                log_to_file(&format!(
+                    "index_single_bookmark_with_page_info: created {doc_count} documents via page splitting"
+                ));
+            } else {
+                // Small content or single page - use regular indexing
+                log_to_file(&format!(
+                    "index_single_bookmark_with_page_info: indexing with page_info ({} pages)",
+                    pi.page_count
+                ));
+                indexer.index_bookmark_with_page_info(
+                    &mut writer,
+                    bookmark,
+                    Some(content_str),
+                    Some(pi),
+                )?;
+                log_to_file(
+                    "index_single_bookmark_with_page_info: index_bookmark_with_page_info completed",
+                );
+            }
+        } else if let Some(pi) = page_info {
+            // No content but have page info
+            log_to_file(&format!(
+                "index_single_bookmark_with_page_info: indexing with page_info ({} pages), no content",
+                pi.page_count
+            ));
+            indexer.index_bookmark_with_page_info(&mut writer, bookmark, content, Some(pi))?;
+            log_to_file(
+                "index_single_bookmark_with_page_info: index_bookmark_with_page_info completed",
+            );
+        } else {
+            // No page info - regular indexing
+            log_to_file("index_single_bookmark_with_page_info: indexing without page_info");
+            indexer.index_bookmark(&mut writer, bookmark, content)?;
+            log_to_file("index_single_bookmark_with_page_info: index_bookmark completed");
+        }
+
+        // Commit
+        log_to_file("index_single_bookmark_with_page_info: committing...");
+        writer.commit()?;
+        log_to_file("index_single_bookmark_with_page_info: commit completed");
         Ok(())
+    }
+
+    /// Handle chunk-based content transfer for large PDFs
+    /// Chunks are received one at a time and reassembled when all chunks are received
+    fn index_bookmark_chunk(&mut self, params: Value, id: Value) -> Value {
+        // Update index name if provided
+        if let Some(index_name) = params["index_name"].as_str() {
+            if self.index_name != index_name {
+                self.index_name = index_name.to_string();
+                self.indexer = None; // Reset indexer to use new index
+                log_to_file(&format!(
+                    "Chunk: Index name updated to: {}",
+                    self.index_name
+                ));
+            }
+        }
+
+        // Initialize indexer if needed
+        if self.indexer.is_none() {
+            if let Err(e) = self.init_tantivy() {
+                return json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "error": {
+                        "code": -32603,
+                        "message": format!("Failed to initialize index: {}", e)
+                    }
+                });
+            }
+        }
+
+        // Parse chunk parameters
+        let chunk_session_id = params["chunk_session_id"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
+        let bookmark_id = params["bookmark_id"].as_str().unwrap_or("").to_string();
+        let chunk_index = params["chunk_index"].as_u64().unwrap_or(0) as usize;
+        let total_chunks = params["total_chunks"].as_u64().unwrap_or(1) as usize;
+        let is_last_chunk = params["is_last_chunk"].as_bool().unwrap_or(false);
+        let chunk_content = params["chunk_content"].as_str().unwrap_or("").to_string();
+
+        log_to_file(&format!(
+            "Chunk received: session={}, index={}/{}, is_last={}, content_len={}",
+            chunk_session_id,
+            chunk_index + 1,
+            total_chunks,
+            is_last_chunk,
+            chunk_content.len()
+        ));
+
+        // Get or create chunk session
+        let session = self
+            .chunk_sessions
+            .entry(chunk_session_id.clone())
+            .or_insert_with(|| ChunkSession {
+                bookmark_id: bookmark_id.clone(),
+                total_chunks,
+                received_chunks: HashMap::new(),
+                url: None,
+                title: None,
+                folder_path: None,
+                date_added: None,
+                date_modified: None,
+                page_info: None,
+                start_time: Instant::now(),
+            });
+
+        // Store chunk content
+        session.received_chunks.insert(chunk_index, chunk_content);
+
+        // Parse bookmark metadata from first chunk (chunk_index == 0)
+        if chunk_index == 0 {
+            session.url = params["url"].as_str().map(String::from);
+            session.title = params["title"].as_str().map(String::from);
+            session.folder_path = params["folder_path"].as_array().map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str())
+                    .map(String::from)
+                    .collect()
+            });
+            session.date_added = params["date_added"].as_str().map(String::from);
+            session.date_modified = params["date_modified"].as_str().map(String::from);
+
+            // Parse page_info if available
+            session.page_info = params["page_info"].as_object().and_then(|obj| {
+                let page_count = obj.get("page_count")?.as_u64()? as usize;
+                let page_offsets = obj
+                    .get("page_offsets")?
+                    .as_array()?
+                    .iter()
+                    .filter_map(|v| v.as_u64().map(|n| n as usize))
+                    .collect::<Vec<_>>();
+                let content_type = obj.get("content_type")?.as_str()?.to_string();
+                let total_chars = obj.get("total_chars")?.as_u64()? as usize;
+
+                Some(PageInfo {
+                    page_count,
+                    page_offsets,
+                    content_type,
+                    total_chars,
+                })
+            });
+
+            log_to_file(&format!(
+                "Chunk session metadata: url={:?}, title={:?}, page_info={:?}",
+                session.url,
+                session.title,
+                session.page_info.is_some()
+            ));
+        }
+
+        // Check if all chunks received
+        if session.received_chunks.len() == session.total_chunks {
+            log_to_file(&format!(
+                "All {} chunks received for session {}, reassembling content...",
+                session.total_chunks, chunk_session_id
+            ));
+
+            // Reassemble content in order
+            let mut full_content = String::new();
+            for i in 0..session.total_chunks {
+                if let Some(chunk) = session.received_chunks.get(&i) {
+                    full_content.push_str(chunk);
+                } else {
+                    log_to_file(&format!("Missing chunk {i} in session {chunk_session_id}"));
+                    return json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "error": {
+                            "code": -32603,
+                            "message": format!("Missing chunk {i} in session")
+                        }
+                    });
+                }
+            }
+
+            log_to_file(&format!(
+                "Reassembled content: {} chars from {} chunks",
+                full_content.len(),
+                session.total_chunks
+            ));
+
+            // Create bookmark from session data
+            let bookmark = FlatBookmark {
+                id: session.bookmark_id.clone(),
+                name: session.title.clone().unwrap_or_default(),
+                url: session.url.clone().unwrap_or_default(),
+                folder_path: session.folder_path.clone().unwrap_or_default(),
+                date_added: session.date_added.clone(),
+                date_modified: session.date_modified.clone(),
+            };
+
+            let page_info = session.page_info.clone();
+            let duration = session.start_time.elapsed();
+
+            // Remove session before indexing
+            self.chunk_sessions.remove(&chunk_session_id);
+
+            // Index the reassembled bookmark
+            let Some(indexer) = &self.indexer else {
+                return json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "error": {
+                        "code": -32603,
+                        "message": "Tantivy index not initialized"
+                    }
+                });
+            };
+
+            match self.index_single_bookmark_with_page_info(
+                indexer,
+                &bookmark,
+                Some(&full_content),
+                page_info.as_ref(),
+            ) {
+                Ok(_) => {
+                    // Update metadata
+                    if let Some(metadata) = &mut self.metadata {
+                        let now = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs();
+
+                        metadata.bookmarks.insert(
+                            bookmark.id.clone(),
+                            BookmarkMetadata {
+                                url: bookmark.url.clone(),
+                                date_modified: bookmark.date_modified.clone(),
+                                indexed_at: now,
+                                content_hash: Some(Self::calculate_content_hash(Some(
+                                    &full_content,
+                                ))),
+                            },
+                        );
+                        let _ = self.save_metadata();
+                    }
+
+                    log_to_file(&format!(
+                        "Successfully indexed chunked bookmark: {} ({} chars, {} chunks, {:?})",
+                        bookmark.url,
+                        full_content.len(),
+                        total_chunks,
+                        duration
+                    ));
+
+                    json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "result": {
+                            "status": "indexed",
+                            "url": bookmark.url,
+                            "content_length": full_content.len(),
+                            "chunks_received": total_chunks,
+                            "duration_ms": duration.as_millis() as u64
+                        }
+                    })
+                }
+                Err(e) => {
+                    log_to_file(&format!("Failed to index chunked bookmark: {e}"));
+                    json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "error": {
+                            "code": -32603,
+                            "message": format!("Failed to index: {e}")
+                        }
+                    })
+                }
+            }
+        } else {
+            // More chunks expected, return acknowledgment
+            json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "result": {
+                    "status": "chunk_received",
+                    "chunk_index": chunk_index,
+                    "chunks_received": session.received_chunks.len(),
+                    "total_chunks": session.total_chunks
+                }
+            })
+        }
     }
 
     fn get_index_stats(&self, id: Value) -> Value {
@@ -1092,6 +1500,22 @@ fn main() -> io::Result<()> {
 fn send_response(response: Value) -> io::Result<()> {
     let json_str = response.to_string();
     let json_bytes = json_str.as_bytes();
+
+    // Log response size for debugging
+    log_to_file(&format!(
+        "Response size: {} bytes ({:.2} KB)",
+        json_bytes.len(),
+        json_bytes.len() as f64 / 1024.0
+    ));
+
+    // Check for 1MB limit (Native→Chrome direction)
+    const MAX_RESPONSE_SIZE: usize = 1024 * 1024; // 1MB
+    if json_bytes.len() > MAX_RESPONSE_SIZE {
+        log_to_file(&format!(
+            "WARNING: Response exceeds 1MB limit! Size: {} bytes",
+            json_bytes.len()
+        ));
+    }
 
     // Write message length (4 bytes, little-endian)
     let len = json_bytes.len() as u32;

@@ -39,13 +39,33 @@ async function extractPdfText(url) {
     console.log(`[Offscreen] Downloaded ${arrayBuffer.byteLength} bytes`);
 
     // Load PDF with PDF.js
+    // CMap設定を追加して日本語（CJK）フォントを正しく処理する
+    const cMapUrl = chrome.runtime.getURL('pdfjs/cmaps/');
+    console.log(`[Offscreen] CMap URL: ${cMapUrl}`);
+
+    const standardFontDataUrl = chrome.runtime.getURL('pdfjs/standard_fonts/');
+    console.log(`[Offscreen] Standard Font URL: ${standardFontDataUrl}`);
+
     const loadingTask = pdfjsLib.getDocument({
       data: new Uint8Array(arrayBuffer),
       // Worker is available in offscreen document
-      disableWorker: false
+      disableWorker: false,
+      // CMap設定（日本語PDF対応）
+      cMapUrl: cMapUrl,
+      cMapPacked: true,
+      // 標準フォントデータURL
+      standardFontDataUrl: standardFontDataUrl,
     });
 
-    const pdf = await loadingTask.promise;
+    // PDFロード中のエラーをキャッチ
+    loadingTask.onProgress = (progress) => {
+      console.log(`[Offscreen] Loading progress: ${progress.loaded}/${progress.total || '?'}`);
+    };
+
+    const pdf = await loadingTask.promise.catch(err => {
+      console.error(`[Offscreen] PDF load error: ${err.message}`);
+      throw err;
+    });
     console.log(`[Offscreen] Loaded PDF with ${pdf.numPages} pages`);
 
     let fullText = [];

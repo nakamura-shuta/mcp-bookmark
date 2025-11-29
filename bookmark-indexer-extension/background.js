@@ -1,3 +1,10 @@
+// ============================================
+// BACKGROUND.JS VERSION: 2024-11-29-v10
+// Reverted to simple single-message sending (Chrome→Native has 64MB limit, not 1MB)
+// Investigating actual root cause of issues
+// ============================================
+console.log('[Background] VERSION: 2024-11-29-v10 - Single message (64MB limit Chrome→Native)');
+
 // PDF processing using Offscreen API
 let offscreenCreated = false;
 
@@ -453,10 +460,10 @@ class ParallelContentFetcher {
 }
 
 // Native Communication
-function sendToNative(method, params = {}) {
+function sendToNative(method, params = {}, timeoutMs = 300000) {
   return new Promise((resolve, reject) => {
     const port = chrome.runtime.connectNative('com.mcp_bookmark');
-    const timeoutId = setTimeout(() => reject(new Error('Timeout')), 60000);
+    const timeoutId = setTimeout(() => reject(new Error('Timeout')), timeoutMs);
     
     port.onDisconnect.addListener(() => {
       clearTimeout(timeoutId);
@@ -562,15 +569,43 @@ async function indexFolderParallel(folderId, folderName, indexName) {
       });
     }
     
-    // Step 3: Send ALL bookmarks in ONE message
-    console.log(`[Simple] Sending ${bookmarksWithContent.length} bookmarks in single message...`);
-    
-    const indexResult = await sendToNative('index_bookmarks_batch', {
-      index_name: finalIndexName,
-      bookmarks: bookmarksWithContent
-    });
-    
-    console.log(`[Simple] Indexing completed:`, indexResult);
+    // Step 3: Send bookmarks directly (Chrome→Native has 64MB limit, not 1MB)
+    // NOTE: The 1MB limit is only for Native→Chrome direction
+    const totalContentSize = bookmarksWithContent.reduce((sum, b) => sum + (b.content?.length || 0), 0);
+    console.log(`[Simple] Total content size: ${(totalContentSize / 1024 / 1024).toFixed(2)} MB`);
+    console.log(`[Simple] Sending ${bookmarksWithContent.length} bookmarks...`);
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (let i = 0; i < bookmarksWithContent.length; i++) {
+      const bookmark = bookmarksWithContent[i];
+      const contentSize = bookmark.content?.length || 0;
+
+      console.log(`[Simple] Processing bookmark ${i + 1}/${bookmarksWithContent.length}: ${bookmark.title} (${(contentSize / 1024).toFixed(1)} KB)`);
+
+      try {
+        await sendToNative('index_bookmark', {
+          index_name: finalIndexName,
+          id: bookmark.id,
+          url: bookmark.url,
+          title: bookmark.title,
+          folder_path: bookmark.folder_path,
+          date_added: bookmark.date_added,
+          date_modified: bookmark.date_modified,
+          content: bookmark.content,
+          page_info: bookmark.page_info
+        }, 120000); // 2 minutes timeout for large content
+
+        successCount++;
+        console.log(`[Simple] Bookmark ${i + 1} indexed successfully`);
+      } catch (error) {
+        errorCount++;
+        console.error(`[Simple] Failed to index bookmark ${i + 1}:`, error);
+      }
+    }
+
+    console.log(`[Simple] All bookmarks sent: ${successCount} success, ${errorCount} errors`);
     
     // Send final progress update to ensure UI shows 100%
     chrome.runtime.sendMessage({
