@@ -51,6 +51,11 @@ impl BookmarkIndexer {
         &self.schema
     }
 
+    /// Get a reference to the index
+    pub fn index(&self) -> &Index {
+        &self.index
+    }
+
     /// Create an index writer
     pub fn create_writer(&self, heap_size: usize) -> Result<IndexWriter> {
         // Ensure minimum heap size for tantivy 0.24

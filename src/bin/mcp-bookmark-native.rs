@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use mcp_bookmark::bookmark::FlatBookmark;
 use mcp_bookmark::search::indexer::{BookmarkIndexer, PageInfo};
 use mcp_bookmark::search::schema::BookmarkSchema;
+use tantivy::schema::Value as TantivyValue;
 use tantivy::Index;
 
 // Import Lindera tokenizer
@@ -521,7 +522,7 @@ impl NativeMessagingHost {
     }
 
     fn get_index_stats(&self, id: Value) -> Value {
-        let Some(_indexer) = &self.indexer else {
+        let Some(indexer) = &self.indexer else {
             return json!({
                 "jsonrpc": "2.0",
                 "id": id,
@@ -532,15 +533,80 @@ impl NativeMessagingHost {
             });
         };
 
-        // TODO: Implement actual stats gathering
+        // Get reader for stats
+        let reader = match indexer.index().reader() {
+            Ok(r) => r,
+            Err(e) => {
+                return json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "error": {
+                        "code": -32603,
+                        "message": format!("Failed to get index reader: {}", e)
+                    }
+                });
+            }
+        };
+
+        let searcher = reader.searcher();
+
+        // Count total documents
+        let total_documents = searcher.num_docs() as usize;
+
+        // Count unique bookmarks (excluding _part_ suffixes)
+        let bookmark_count = self.count_unique_bookmarks(&searcher, indexer.schema());
+
+        // Calculate index size
+        let index_path = dirs::data_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("mcp-bookmark")
+            .join(&self.index_name);
+        let index_size_bytes = Self::calculate_dir_size(&index_path).unwrap_or(0);
+
         json!({
             "jsonrpc": "2.0",
             "id": id,
             "result": {
                 "status": "ok",
-                "indexed": true
+                "total_documents": total_documents,
+                "bookmark_count": bookmark_count,
+                "index_size_bytes": index_size_bytes,
+                "index_name": self.index_name
             }
         })
+    }
+
+    fn count_unique_bookmarks(
+        &self,
+        searcher: &tantivy::Searcher,
+        schema: &BookmarkSchema,
+    ) -> usize {
+        use std::collections::HashSet;
+        use tantivy::TantivyDocument;
+
+        let mut base_ids: HashSet<String> = HashSet::new();
+
+        for segment_reader in searcher.segment_readers() {
+            if let Ok(store_reader) = segment_reader.get_store_reader(1) {
+                for doc_id in 0..segment_reader.num_docs() {
+                    if let Ok(doc) = store_reader.get::<TantivyDocument>(doc_id) {
+                        if let Some(id_value) = doc.get_first(schema.id) {
+                            if let Some(id_str) = TantivyValue::as_str(&id_value) {
+                                // Extract base ID by removing _part_N suffix
+                                let base_id = if let Some(pos) = id_str.find("_part_") {
+                                    &id_str[..pos]
+                                } else {
+                                    id_str
+                                };
+                                base_ids.insert(base_id.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        base_ids.len()
     }
 
     fn list_indexes(&self, id: Value) -> Value {
