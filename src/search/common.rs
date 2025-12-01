@@ -219,6 +219,17 @@ pub fn extract_page_number_from_snippet(snippet: &str, full_content: &str) -> Op
     last_page
 }
 
+/// Index statistics (unified definition)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IndexStats {
+    /// Total number of documents in the index
+    pub total_documents: usize,
+    /// Number of unique bookmarks (may differ from total_documents for split PDFs)
+    pub bookmark_count: usize,
+    /// Total size of the index directory in bytes
+    pub index_size_bytes: u64,
+}
+
 /// Common search configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommonSearchConfig {

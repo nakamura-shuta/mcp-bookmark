@@ -12,7 +12,7 @@ use tantivy::{
 };
 use tracing::debug;
 
-use super::common::{INDEX_METADATA_FILE, doc_to_result};
+use super::common::{INDEX_METADATA_FILE, IndexStats, doc_to_result};
 use super::query_parser::{QueryParser as CustomQueryParser, QueryTerm};
 use super::schema::BookmarkSchema;
 use super::scored_snippet::ScoredSnippetGenerator;
@@ -560,14 +560,6 @@ pub struct SearchResult {
     pub last_indexed: Option<String>,
     pub context_type: Option<String>,
     pub page_number: Option<usize>,
-}
-
-/// Index statistics
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IndexStats {
-    pub total_documents: usize,
-    pub bookmark_count: usize,
-    pub index_size_bytes: u64,
 }
 
 #[cfg(test)]

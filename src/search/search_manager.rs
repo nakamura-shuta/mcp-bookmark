@@ -7,7 +7,7 @@ use tantivy::{Index, IndexWriter, directory::MmapDirectory};
 use tracing::{debug, info};
 
 use super::common::{
-    DEFAULT_INDEX_NAME, DEFAULT_WRITER_HEAP_SIZE, INDEX_METADATA_FILE, IndexingStatus,
+    DEFAULT_INDEX_NAME, DEFAULT_WRITER_HEAP_SIZE, INDEX_METADATA_FILE, IndexStats, IndexingStatus,
 };
 use super::indexer::BookmarkIndexer;
 use super::schema::BookmarkSchema;
@@ -27,14 +27,6 @@ pub struct IndexMetadata {
     pub last_updated: String,
     pub bookmark_count: usize,
     pub indexed_count: usize,
-    pub index_size_bytes: u64,
-}
-
-/// Index statistics
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IndexStats {
-    pub total_documents: usize,
-    pub bookmark_count: usize,
     pub index_size_bytes: u64,
 }
 

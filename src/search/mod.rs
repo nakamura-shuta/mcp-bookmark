@@ -11,6 +11,7 @@ pub mod tokenizer;
 pub mod unified_searcher;
 
 // Re-export public APIs
+pub use common::IndexStats;
 pub use indexer::PageInfo;
 pub use multi_index::MultiIndexSearchManager;
 pub use search_manager::SearchManager;
