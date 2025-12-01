@@ -2,6 +2,58 @@
 
 ## [Unreleased]
 
+## [v0.6.1] - 2025-12-01
+
+### Changed
+
+- **Refactoring: Remove unused modules and APIs**
+  - Removed `batch_manager.rs` and `content.rs` modules (unused in production)
+  - Removed deprecated Native APIs: `batch_start`, `batch_add`, `batch_end`, `index_bookmark_chunk`, `sync_bookmarks`, `check_for_updates`
+  - Reduced `mcp-bookmark-native.rs` from 1529 to 708 lines (53% reduction)
+
+- **Unified IndexStats definition**
+  - Consolidated `IndexStats` struct in `common.rs`
+  - Removed duplicate definitions from `search_manager.rs` and `unified_searcher.rs`
+
+### Fixed
+
+- **Real index statistics in Native host**
+  - Implemented actual `get_stats` API with real document counts
+  - Added `count_unique_bookmarks()` for accurate bookmark counting
+  - Index size calculation from directory
+
+### Improved
+
+- **Documentation updates**
+  - Updated ARCHITECTURE.md with current API reference
+  - Added supported Native APIs table
+  - Added minimum Extension version requirement (1.0.0+)
+
+## [v0.6.0] - 2025-11-30
+
+### Added
+
+- **Page-based content splitting for large PDFs**
+  - PDFs are split into ~100 page chunks for efficient indexing
+  - Each chunk stored as separate document with `_part_N` suffix
+  - Enables page-range retrieval without loading entire PDF
+
+- **PDF.js CMap and font files for CJK support**
+  - Added CMap files for Chinese, Japanese, Korean PDF rendering
+  - Added standard fonts for proper PDF text extraction
+
+### Changed
+
+- **Enhanced get_bookmark_content_range**
+  - Improved handling for split PDF documents
+  - Better page boundary detection across document parts
+
+### Fixed
+
+- **Large index handling**
+  - Fixed TopDocs limit issue in unique bookmark counting
+  - Segment-based iteration for accurate counts on large indexes
+
 ## [v0.5.2] - 2025-10-01
 
 ### Added
