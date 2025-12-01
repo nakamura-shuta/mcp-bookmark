@@ -1,0 +1,12 @@
+{
+  "name": "bookmark-indexer-extension",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Chrome extension for indexing bookmarks with PDF support",
+  "scripts": {
+    "setup-cmaps": "node scripts/setup-cmaps.js"
+  },
+  "devDependencies": {
+    "pdfjs-dist": "^3.11.174"
+  }
+}
