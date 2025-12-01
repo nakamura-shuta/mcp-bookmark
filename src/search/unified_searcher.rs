@@ -171,33 +171,48 @@ impl UnifiedSearcher {
     /// Get full content by URL from index
     /// For PDFs split into multiple parts, this retrieves and combines all parts
     pub fn get_content_by_url(&self, url: &str) -> Result<Option<String>> {
+        use tantivy::DocSet;
+        use tantivy::TERMINATED;
+
         let searcher = self.reader.searcher();
-
         let term = Term::from_field_text(self.schema.url, url);
-        let query = TermQuery::new(term, tantivy::schema::IndexRecordOption::Basic);
 
-        // Get all documents with this URL (for split PDFs)
-        let top_docs = searcher.search(&query, &TopDocs::with_limit(100))?;
-
-        if top_docs.is_empty() {
-            return Ok(None);
-        }
-
-        // Collect all parts with their IDs for sorting
+        // Collect all parts with their IDs for sorting (no limit)
         let mut parts: Vec<(String, String)> = Vec::new();
 
-        for (_score, doc_address) in top_docs {
-            let doc: TantivyDocument = searcher.doc(doc_address)?;
+        // Iterate through all segments to find all documents with this URL
+        for segment_reader in searcher.segment_readers() {
+            let inverted_index = segment_reader.inverted_index(self.schema.url)?;
 
-            let id = doc
-                .get_first(self.schema.id)
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
+            if let Some(_term_info) = inverted_index.get_term_info(&term)? {
+                let postings_opt =
+                    inverted_index.read_postings(&term, tantivy::schema::IndexRecordOption::Basic)?;
 
-            if let Some(content_value) = doc.get_first(self.schema.content) {
-                if let Some(content_text) = content_value.as_str() {
-                    parts.push((id, content_text.to_string()));
+                if let Some(mut postings) = postings_opt {
+                    let store_reader = segment_reader.get_store_reader(1)?;
+
+                loop {
+                    let doc_id = postings.doc();
+                    if doc_id == TERMINATED {
+                        break;
+                    }
+
+                    if let Ok(doc) = store_reader.get::<TantivyDocument>(doc_id) {
+                        let id = doc
+                            .get_first(self.schema.id)
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+
+                        if let Some(content_value) = doc.get_first(self.schema.content) {
+                            if let Some(content_text) = content_value.as_str() {
+                                parts.push((id, content_text.to_string()));
+                            }
+                        }
+                    }
+
+                    postings.advance();
+                }
                 }
             }
         }
@@ -260,24 +275,25 @@ impl UnifiedSearcher {
         use std::collections::HashSet;
 
         let searcher = self.reader.searcher();
-
-        // Use AllQuery to get all documents
-        let all_query = tantivy::query::AllQuery;
-        let top_docs = searcher.search(&all_query, &TopDocs::with_limit(10000))?;
-
         let mut base_ids: HashSet<String> = HashSet::new();
 
-        for (_score, doc_address) in top_docs {
-            let doc: TantivyDocument = searcher.doc(doc_address)?;
-            if let Some(id_value) = doc.get_first(self.schema.id) {
-                if let Some(id_str) = id_value.as_str() {
-                    // Extract base ID by removing _part_N suffix
-                    let base_id = if let Some(pos) = id_str.find("_part_") {
-                        &id_str[..pos]
-                    } else {
-                        id_str
-                    };
-                    base_ids.insert(base_id.to_string());
+        // Iterate through all segments and documents directly (no limit)
+        for segment_reader in searcher.segment_readers() {
+            let store_reader = segment_reader.get_store_reader(1)?;
+
+            for doc_id in 0..segment_reader.num_docs() {
+                if let Ok(doc) = store_reader.get::<TantivyDocument>(doc_id) {
+                    if let Some(id_value) = doc.get_first(self.schema.id) {
+                        if let Some(id_str) = id_value.as_str() {
+                            // Extract base ID by removing _part_N suffix
+                            let base_id = if let Some(pos) = id_str.find("_part_") {
+                                &id_str[..pos]
+                            } else {
+                                id_str
+                            };
+                            base_ids.insert(base_id.to_string());
+                        }
+                    }
                 }
             }
         }

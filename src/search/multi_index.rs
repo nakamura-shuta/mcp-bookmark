@@ -177,8 +177,8 @@ impl SearchManagerTrait for MultiIndexSearchManager {
         end_page: usize,
     ) -> Result<Option<String>> {
         // Try to get page range from any index that has it
-        // Keep track of the last error for better error reporting
-        let mut last_error: Option<anyhow::Error> = None;
+        // Keep track of page range errors (not I/O errors) for better error reporting
+        let mut page_range_error: Option<anyhow::Error> = None;
 
         for manager in &self.managers {
             match manager
@@ -188,14 +188,19 @@ impl SearchManagerTrait for MultiIndexSearchManager {
                 Ok(Some(content)) => return Ok(Some(content)),
                 Ok(None) => continue, // URL not found in this index, try next
                 Err(e) => {
-                    // URL found but page range error - save for reporting
-                    last_error = Some(e);
+                    // Only save page range specific errors (contain "pages" or "page" in message)
+                    // Skip I/O errors which may be transient
+                    let err_msg = e.to_string().to_lowercase();
+                    if err_msg.contains("page") || err_msg.contains("marker") {
+                        page_range_error = Some(e);
+                    }
+                    // For other errors (I/O, etc.), just continue to next index
                 }
             }
         }
 
-        // If we have a page range error, return it
-        if let Some(e) = last_error {
+        // If we have a page range error (URL was found but pages were invalid), return it
+        if let Some(e) = page_range_error {
             return Err(e);
         }
 

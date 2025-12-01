@@ -34,6 +34,7 @@ pub struct IndexMetadata {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IndexStats {
     pub total_documents: usize,
+    pub bookmark_count: usize,
     pub index_size_bytes: u64,
 }
 
@@ -449,6 +450,7 @@ impl SearchManager {
 
         Ok(IndexStats {
             total_documents: stats.total_documents,
+            bookmark_count: stats.bookmark_count,
             index_size_bytes: size_bytes,
         })
     }
