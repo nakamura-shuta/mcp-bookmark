@@ -7,9 +7,8 @@ Chrome Bookmark MCP Server provides read-only access to Chrome bookmarks via the
 ## Core Components
 
 - `bookmark.rs` - Chrome bookmark JSON parsing and filtering
-- `chrome_profile.rs` - Chrome profile detection and management  
+- `chrome_profile.rs` - Chrome profile detection and management
 - `mcp_server.rs` - MCP protocol implementation with 6 tools
-- `batch_manager.rs` - Parallel batch processing for high-performance indexing
 - `search/` - Tantivy full-text search with advanced features
   - `common.rs` - Shared types and utilities
   - `search_manager.rs` - Index management and search operations
@@ -41,7 +40,6 @@ Chrome Bookmark MCP Server provides read-only access to Chrome bookmarks via the
 - **Skip unchanged bookmarks** during re-indexing
 - **Content hashing** for change detection
 - **Metadata tracking** with indexed timestamps
-- `check_for_updates` and `sync_bookmarks` native messaging methods
 - Reduces re-indexing time from ~50 seconds to ~1 second for unchanged bookmarks
 
 ### Multi-Index Search (v0.4.1)
