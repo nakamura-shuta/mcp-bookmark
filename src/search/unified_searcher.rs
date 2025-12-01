@@ -169,27 +169,72 @@ impl UnifiedSearcher {
     }
 
     /// Get full content by URL from index
+    /// For PDFs split into multiple parts, this retrieves and combines all parts
     pub fn get_content_by_url(&self, url: &str) -> Result<Option<String>> {
         let searcher = self.reader.searcher();
 
         let term = Term::from_field_text(self.schema.url, url);
         let query = TermQuery::new(term, tantivy::schema::IndexRecordOption::Basic);
 
-        let top_docs = searcher.search(&query, &TopDocs::with_limit(1))?;
+        // Get all documents with this URL (for split PDFs)
+        let top_docs = searcher.search(&query, &TopDocs::with_limit(100))?;
 
-        if let Some((_score, doc_address)) = top_docs.into_iter().next() {
+        if top_docs.is_empty() {
+            return Ok(None);
+        }
+
+        // Collect all parts with their IDs for sorting
+        let mut parts: Vec<(String, String)> = Vec::new();
+
+        for (_score, doc_address) in top_docs {
             let doc: TantivyDocument = searcher.doc(doc_address)?;
+
+            let id = doc
+                .get_first(self.schema.id)
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+
             if let Some(content_value) = doc.get_first(self.schema.content) {
                 if let Some(content_text) = content_value.as_str() {
-                    return Ok(Some(content_text.to_string()));
+                    parts.push((id, content_text.to_string()));
                 }
             }
         }
 
-        Ok(None)
+        if parts.is_empty() {
+            return Ok(None);
+        }
+
+        // Sort parts by ID to ensure correct order (e.g., "506", "506_part_1", "506_part_2")
+        parts.sort_by(|a, b| {
+            // Extract base ID and part number for proper sorting
+            let parse_id = |id: &str| -> (String, usize) {
+                if let Some(pos) = id.rfind("_part_") {
+                    let base = id[..pos].to_string();
+                    let part_num = id[pos + 6..].parse::<usize>().unwrap_or(0);
+                    (base, part_num)
+                } else {
+                    (id.to_string(), 0) // Base document has part number 0
+                }
+            };
+
+            let (base_a, part_a) = parse_id(&a.0);
+            let (base_b, part_b) = parse_id(&b.0);
+
+            match base_a.cmp(&base_b) {
+                std::cmp::Ordering::Equal => part_a.cmp(&part_b),
+                other => other,
+            }
+        });
+
+        // Combine all parts
+        let combined_content: String = parts.into_iter().map(|(_, content)| content).collect();
+
+        Ok(Some(combined_content))
     }
 
-    /// Get index statistics
+    /// Get index statistics including unique bookmark count
     pub fn get_stats(&self) -> Result<IndexStats> {
         let searcher = self.reader.searcher();
         let segment_readers = searcher.segment_readers();
@@ -199,10 +244,45 @@ impl UnifiedSearcher {
             total_docs += segment_reader.num_docs() as usize;
         }
 
+        // Count unique bookmarks by collecting all IDs and extracting base IDs
+        let bookmark_count = self.count_unique_bookmarks()?;
+
         Ok(IndexStats {
             total_documents: total_docs,
+            bookmark_count,
             index_size_bytes: 0, // Can be calculated if needed
         })
+    }
+
+    /// Count unique bookmarks by extracting base IDs from all documents
+    /// Documents with IDs like "123_part_0", "123_part_1" are counted as one bookmark "123"
+    pub fn count_unique_bookmarks(&self) -> Result<usize> {
+        use std::collections::HashSet;
+
+        let searcher = self.reader.searcher();
+
+        // Use AllQuery to get all documents
+        let all_query = tantivy::query::AllQuery;
+        let top_docs = searcher.search(&all_query, &TopDocs::with_limit(10000))?;
+
+        let mut base_ids: HashSet<String> = HashSet::new();
+
+        for (_score, doc_address) in top_docs {
+            let doc: TantivyDocument = searcher.doc(doc_address)?;
+            if let Some(id_value) = doc.get_first(self.schema.id) {
+                if let Some(id_str) = id_value.as_str() {
+                    // Extract base ID by removing _part_N suffix
+                    let base_id = if let Some(pos) = id_str.find("_part_") {
+                        &id_str[..pos]
+                    } else {
+                        id_str
+                    };
+                    base_ids.insert(base_id.to_string());
+                }
+            }
+        }
+
+        Ok(base_ids.len())
     }
 
     /// Parse query and return terms, or empty query if needed
@@ -470,6 +550,7 @@ pub struct SearchResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IndexStats {
     pub total_documents: usize,
+    pub bookmark_count: usize,
     pub index_size_bytes: u64,
 }
 
@@ -649,5 +730,81 @@ mod tests {
             !results.is_empty(),
             "Should find documents with Japanese phrase"
         );
+    }
+
+    #[test]
+    fn test_count_unique_bookmarks_no_parts() {
+        let temp_dir = TempDir::new().unwrap();
+        let schema = BookmarkSchema::new();
+        let index = Index::create_in_dir(temp_dir.path(), schema.schema.clone()).unwrap();
+
+        register_lindera_tokenizer(&index).unwrap();
+
+        let mut index_writer = index.writer(50_000_000).unwrap();
+
+        // Add 3 regular bookmarks (no page splitting)
+        for i in 1..=3 {
+            index_writer
+                .add_document(doc!(
+                    schema.id => format!("{}", i),
+                    schema.title => format!("Bookmark {}", i),
+                    schema.url => format!("https://example.com/{}", i),
+                    schema.content => format!("Content for bookmark {}", i),
+                    schema.folder_path => "test"
+                ))
+                .unwrap();
+        }
+
+        index_writer.commit().unwrap();
+
+        let searcher = UnifiedSearcher::new(index, schema).unwrap();
+        let stats = searcher.get_stats().unwrap();
+
+        assert_eq!(stats.total_documents, 3);
+        assert_eq!(stats.bookmark_count, 3);
+    }
+
+    #[test]
+    fn test_count_unique_bookmarks_with_parts() {
+        let temp_dir = TempDir::new().unwrap();
+        let schema = BookmarkSchema::new();
+        let index = Index::create_in_dir(temp_dir.path(), schema.schema.clone()).unwrap();
+
+        register_lindera_tokenizer(&index).unwrap();
+
+        let mut index_writer = index.writer(50_000_000).unwrap();
+
+        // Add 2 bookmarks, one with parts (simulating PDF page splitting)
+        // Bookmark 1: no parts
+        index_writer
+            .add_document(doc!(
+                schema.id => "100",
+                schema.title => "Regular Bookmark",
+                schema.url => "https://example.com/1",
+                schema.content => "Regular content",
+                schema.folder_path => "test"
+            ))
+            .unwrap();
+
+        // Bookmark 2: with 3 parts (simulating PDF with 3 page ranges)
+        for part in 0..3 {
+            index_writer
+                .add_document(doc!(
+                    schema.id => format!("200_part_{}", part),
+                    schema.title => format!("PDF Document [Pages {}-{}]", part * 100 + 1, (part + 1) * 100),
+                    schema.url => "https://example.com/document.pdf",
+                    schema.content => format!("Content for pages {}-{}", part * 100 + 1, (part + 1) * 100),
+                    schema.folder_path => "test"
+                ))
+                .unwrap();
+        }
+
+        index_writer.commit().unwrap();
+
+        let searcher = UnifiedSearcher::new(index, schema).unwrap();
+        let stats = searcher.get_stats().unwrap();
+
+        assert_eq!(stats.total_documents, 4); // 1 + 3 parts
+        assert_eq!(stats.bookmark_count, 2); // 2 unique bookmarks (100 and 200)
     }
 }

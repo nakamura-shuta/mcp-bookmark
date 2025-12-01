@@ -43,6 +43,9 @@ pub struct IndexingStatus {
 
     /// Number of documents (for pre-built index)
     pub doc_count: usize,
+
+    /// Number of unique bookmarks (for pre-built index)
+    pub bookmark_count: usize,
 }
 
 /// Type of indexing operation
@@ -56,11 +59,11 @@ impl IndexingStatus {
     /// Create new status (for compatibility)
     pub fn new(_total: usize) -> Self {
         // Always returns read-only status as we only support pre-built indexes
-        Self::for_readonly(0)
+        Self::for_readonly(0, 0)
     }
 
     /// Create status for read-only index
-    pub fn for_readonly(doc_count: usize) -> Self {
+    pub fn for_readonly(doc_count: usize, bookmark_count: usize) -> Self {
         Self {
             total: AtomicUsize::new(0),
             completed: AtomicUsize::new(0),
@@ -68,6 +71,7 @@ impl IndexingStatus {
             is_complete: AtomicBool::new(true),
             index_type: IndexingType::ReadOnly,
             doc_count,
+            bookmark_count,
         }
     }
 
@@ -78,7 +82,14 @@ impl IndexingStatus {
 
     /// Get status summary
     pub fn summary(&self) -> String {
-        format!("Read-only index: {} documents", self.doc_count)
+        if self.bookmark_count > 0 && self.bookmark_count != self.doc_count {
+            format!(
+                "Read-only index: {} bookmarks ({} documents)",
+                self.bookmark_count, self.doc_count
+            )
+        } else {
+            format!("Read-only index: {} documents", self.doc_count)
+        }
     }
 }
 
@@ -236,9 +247,23 @@ mod tests {
 
     #[test]
     fn test_indexing_status_readonly() {
-        let status = IndexingStatus::for_readonly(100);
+        let status = IndexingStatus::for_readonly(100, 10);
         assert_eq!(status.progress(), 100.0); // Always 100% for read-only
         assert_eq!(status.doc_count, 100);
+        assert_eq!(status.bookmark_count, 10);
+        assert_eq!(
+            status.summary(),
+            "Read-only index: 10 bookmarks (100 documents)"
+        );
+    }
+
+    #[test]
+    fn test_indexing_status_readonly_same_count() {
+        // When bookmark_count == doc_count (no page splitting)
+        let status = IndexingStatus::for_readonly(50, 50);
+        assert_eq!(status.doc_count, 50);
+        assert_eq!(status.bookmark_count, 50);
+        assert_eq!(status.summary(), "Read-only index: 50 documents");
     }
 
     #[test]

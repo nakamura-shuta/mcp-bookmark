@@ -117,13 +117,17 @@ impl SearchManager {
         let searcher =
             UnifiedSearcher::open_readonly(&index_dir).context("Failed to open read-only index")?;
 
-        // Get document count
+        // Get document count and bookmark count
         let stats = searcher.get_stats()?;
         let doc_count = stats.total_documents;
+        let bookmark_count = stats.bookmark_count;
 
-        info!("Read-only index opened with {} documents", doc_count);
+        info!(
+            "Read-only index opened with {} bookmarks ({} documents)",
+            bookmark_count, doc_count
+        );
 
-        let indexing_status = Arc::new(IndexingStatus::for_readonly(doc_count));
+        let indexing_status = Arc::new(IndexingStatus::for_readonly(doc_count, bookmark_count));
 
         Ok(Self {
             index: None,
@@ -380,15 +384,24 @@ impl SearchManager {
         }
 
         // Check if requested pages exist
+        let min_page = page_positions
+            .iter()
+            .map(|(num, _)| *num)
+            .min()
+            .unwrap_or(0);
         let max_page = page_positions
             .iter()
             .map(|(num, _)| *num)
             .max()
             .unwrap_or(0);
-        if end_page > max_page {
+
+        // Check if requested range is within available pages
+        if start_page < min_page || end_page > max_page {
             return Err(anyhow::anyhow!(
-                "Requested end_page ({}) exceeds available pages ({})",
+                "Requested pages {}-{} are outside available range. Available pages: {}-{}",
+                start_page,
                 end_page,
+                min_page,
                 max_page
             ));
         }
@@ -419,9 +432,11 @@ impl SearchManager {
                 Ok(Some(range_content.to_string()))
             }
             _ => Err(anyhow::anyhow!(
-                "Could not find page range {}-{} in content",
+                "Could not find page range {}-{} in content. Pages may not be contiguous. Available pages: {}-{}",
                 start_page,
-                end_page
+                end_page,
+                min_page,
+                max_page
             )),
         }
     }
@@ -560,10 +575,18 @@ impl SearchManagerTrait for SearchManager {
 
     fn get_indexing_status(&self) -> String {
         if self.read_only {
-            format!(
-                "✅ Chrome Extension index loaded: {} documents ready (read-only)",
-                self.indexing_status.doc_count
-            )
+            let doc_count = self.indexing_status.doc_count;
+            let bookmark_count = self.indexing_status.bookmark_count;
+
+            if bookmark_count > 0 && bookmark_count != doc_count {
+                format!(
+                    "✅ Chrome Extension index loaded: {bookmark_count} bookmarks ({doc_count} documents) ready (read-only)"
+                )
+            } else {
+                format!(
+                    "✅ Chrome Extension index loaded: {doc_count} documents ready (read-only)"
+                )
+            }
         } else {
             self.indexing_status.summary()
         }
